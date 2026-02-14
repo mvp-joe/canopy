@@ -39,6 +39,7 @@ Top-level orchestrator. Manages the pipeline: file discovery, change detection, 
 - `IndexDirectory(ctx context.Context, root string) error`
 - `Resolve(ctx context.Context) error`
 - `Query() *QueryBuilder`
+- `Store() *Store`
 - `Close() error`
 
 ### Store
@@ -50,11 +51,13 @@ See [interface.md](interface.md) for the full Store interface.
 ### Risor Runtime
 
 Embeds Risor and executes scripts. The runtime is configured with globals that give scripts access to:
-- `parse(path, language)` — parses a file with tree-sitter, returns the Tree object directly (scripts use tree-sitter's own query methods on the returned Tree/Node)
+- `parse(path, language)` — parses a file with tree-sitter, returns the Tree object (Risor calls methods on it via proxy reflection)
+- `node_text(node)` — returns source text of a node as a string (workaround: Risor can't convert string to `[]byte` for `node.Content()`)
+- `query(pattern, node)` — runs a tree-sitter S-expression query, returns list of match maps (workaround: `NewQuery`/`NewQueryCursor` are free functions Risor can't call, and cursor iteration is awkward)
 - `db` — the Store object, called directly (`db.InsertSymbol(...)`, `db.SymbolsByName(...)`)
 - `log` — logging functions
 
-Scripts receive real Go objects. Risor can call methods on them directly — that's why we chose Risor.
+Scripts receive real Go objects. Risor can call methods on them directly — that's why we chose Risor. The host functions above exist only where Risor's proxy system has limitations ([]byte args, free constructor functions, multi-return cursor loops). Everything else (node traversal, field access, type inspection) works via direct method calls on proxied CGO objects.
 
 ---
 
@@ -120,9 +123,8 @@ Common Risor code shared across extraction and resolution scripts. Examples:
 2. For each changed file:
    a. Engine parses file with tree-sitter → Tree object
    b. Engine looks up extraction script for the file's language
-   c. Engine calls extraction script, passing (Tree, Store, file metadata)
+   c. Engine runs extraction script (script calls `parse()` to get the Tree, uses `db` to write)
    d. Extraction script walks CST, writes to extraction tables
-   e. Tree object is released
 3. Engine runs resolution scripts:
    a. For each language with extracted data, run the resolution script
    b. Resolution script queries extraction tables, writes resolution tables
@@ -131,31 +133,41 @@ Common Risor code shared across extraction and resolution scripts. Examples:
 
 ---
 
-## Testing Harness (Go)
+## Verification Workflow (MCP-based)
 
-### Oracle
+LSP verification happens through existing MCP LSP servers during LLM development sessions — not through custom Go code.
 
-Connects to real LSP servers at development time (not runtime) to get ground-truth semantic data. Used to verify extraction and resolution correctness and generate golden tests.
+### How it works
 
-**Key methods:**
-- `New(language string, config OracleConfig) (*Oracle, error)`
-- `Definition(file string, line, col int) ([]Location, error)`
-- `References(file string, line, col int) ([]Location, error)`
-- `Implementations(file string, line, col int) ([]Location, error)`
-- `Shutdown() error`
+1. LLM team configures the relevant MCP LSP server (e.g., gopls MCP, typescript-language-server MCP)
+2. LLM runs canopy on test files, queries the LSP via MCP, compares results
+3. LLM iterates on the Risor script until accuracy meets threshold (>90%)
+4. LLM writes golden test fixtures from verified results (input files + expected canopy output)
+5. Golden tests run in CI — no MCP, no LSP, just canopy input/output comparison
 
-### Comparator
+### MCP LSP servers by language
 
-Diffs canopy output against oracle output. Produces accuracy reports (precision, recall, F1).
+| Language | MCP LSP Server |
+|----------|---------------|
+| Go | gopls |
+| TypeScript/JavaScript | typescript-language-server |
+| Python | pyright / pylsp |
+| Rust | rust-analyzer |
+| C/C++ | clangd |
+| Java | eclipse.jdt.ls |
+| PHP | phpactor |
+| Ruby | solargraph |
 
-**Key methods:**
-- `Compare(canopyResults, oracleResults []Location) *ComparisonReport`
-- `CompareAll(ctx context.Context, files []string, engine *Engine, oracle *Oracle) *BulkReport`
+### Golden Test Infrastructure (Go)
 
-### SnapshotRunner
+A `canopy test` CLI command — the only Go test infrastructure needed.
 
-Bulk snapshot testing against corpus files. Runs canopy on representative source files and compares against golden snapshots.
+**Corpus:** LLM-generated source files in `testdata/{language}/level-{N}-{name}/`. Each level is frozen once created — new constructs get new levels, not modifications to existing ones.
 
-**Key methods:**
-- `Run(ctx context.Context, corpusDir string) (*SnapshotReport, error)`
-- `Update(ctx context.Context, corpusDir string) error`
+**Golden format:** Minimal LSP-shaped JSON (`golden.json`) with definitions, references, implementations, and calls. Three validation tiers: extraction (Tier 1), simple resolution (Tier 2), full resolution (Tier 3).
+
+**Runner:**
+- `canopy test testdata/go/level-01-basic-decls/` — test one level
+- `canopy test testdata/go/` — test all Go levels
+- `canopy test testdata/` — test everything
+- Reads `src/`, runs canopy, diffs against `golden.json`, reports pass/fail

@@ -1,0 +1,92 @@
+// Spike: Test Risor <-> go-tree-sitter CGO interop
+//
+// This script receives a go-tree-sitter Tree via the parse() host function
+// and attempts to call methods on CGO-backed objects.
+
+print("=== Risor + go-tree-sitter Spike ===")
+print("")
+
+// Step 1: Get the parsed tree from the host function.
+tree := parse()
+src := source()
+print("1. Got tree from parse():")
+print("   tree type:", type(tree))
+print("")
+
+// Step 2: Call RootNode() on the Tree.
+root := tree.RootNode()
+print("2. Called tree.RootNode():")
+print("   root type:", type(root))
+print("   root node type:", root.Type())
+print("   root child count:", root.ChildCount())
+print("   root named child count:", root.NamedChildCount())
+print("")
+
+// Step 3: Walk the tree - iterate over top-level named children.
+print("3. Top-level named children:")
+count := int(root.NamedChildCount())
+for i := 0; i < count; i++ {
+    child := root.NamedChild(i)
+    print(sprintf("   [%d] type=%-25s  children=%d", i, child.Type(), child.ChildCount()))
+}
+print("")
+
+// Step 4: Dig into the first function declaration.
+print("4. Exploring first function_declaration:")
+for i := 0; i < count; i++ {
+    child := root.NamedChild(i)
+    if child.Type() == "function_declaration" {
+        print("   Found function_declaration at index", i)
+        print("   S-expression:", child.String())
+
+        // Try to get the function name via ChildByFieldName.
+        name_node := child.ChildByFieldName("name")
+        if name_node != nil {
+            print("   Function name node type:", name_node.Type())
+            // Content() needs []byte - use node_text() helper instead.
+            text := node_text(name_node)
+            print("   Function name:", text)
+        }
+        break
+    }
+}
+print("")
+
+// Step 5: Try the Query API via exec_query helper.
+print("5. Tree-sitter Query API (via exec_query helper):")
+query := new_query("(function_declaration name: (identifier) @func_name)")
+print("   Created query, type:", type(query))
+
+matches := exec_query(query, root, src)
+print("   Found", len(matches), "function declarations:")
+for _, m := range matches {
+    print(sprintf("   - %s (line %d)", m["text"], m["start"]))
+}
+print("")
+
+// Step 6: Try a more complex query - find method declarations too.
+print("6. Method declarations query:")
+method_query := new_query("(method_declaration name: (field_identifier) @method_name)")
+method_matches := exec_query(method_query, root, src)
+print("   Found", len(method_matches), "method declarations:")
+for _, m := range method_matches {
+    print(sprintf("   - %s (line %d)", m["text"], m["start"]))
+}
+print("")
+
+// Step 7: Try calling query cursor directly from Risor (test raw CGO interop).
+print("7. Direct query cursor usage from Risor:")
+cursor := new_query_cursor()
+print("   Created cursor, type:", type(cursor))
+// Try calling Exec on the cursor directly - this tests passing proxied
+// *Query and *Node args through Risor's reflection layer.
+cursor.Exec(query, root)
+print("   Called cursor.Exec(query, root) - no crash!")
+// Try NextMatch() - returns (*QueryMatch, bool) which is a multi-return.
+// Risor may not handle multi-return Go methods well.
+print("   Attempting cursor.NextMatch()...")
+result := cursor.NextMatch()
+print("   NextMatch result type:", type(result))
+print("")
+
+print("=== Spike Complete ===")

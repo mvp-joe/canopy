@@ -30,7 +30,7 @@ Planning
 
 ## Key Files
 
-- [interface.md](interface.md) - Type definitions: parse, query, Store, domain types, Engine, QueryBuilder
+- [interface.md](interface.md) - Type definitions: globals (parse, db, log), Store, domain types, Engine, QueryBuilder
 - [schema.md](schema.md) - Full database schema (extraction + resolution tables)
 - [system-components.md](system-components.md) - Go core, Risor scripts, testing harness
 - [implementation.md](implementation.md) - Seven-phase implementation plan

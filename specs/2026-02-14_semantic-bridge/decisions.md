@@ -53,23 +53,23 @@
 
 **Context:** Writing accurate semantic extraction and resolution logic for 8+ languages is a massive effort. Each language has unique CST node types, scoping rules, import systems, type hierarchies, and edge cases.
 
-**Decision:** Use LLMs to author and iterate on Risor scripts (both extraction and resolution). Verify correctness using real LSP servers (gopls, tsserver, pyright, etc.) as oracles at development time. LSPs are NOT used at runtime. The workflow is:
+**Decision:** Use LLMs to author and iterate on Risor scripts (both extraction and resolution). Verify correctness using existing MCP LSP servers (gopls, tsserver, pyright, etc.) during LLM development sessions. No custom Go oracle code — the LLM queries the LSP via MCP and compares results directly. LSPs are NOT used at runtime. The workflow is:
 1. LLM writes/edits a Risor script
-2. Script runs against test corpus
-3. Output is compared against LSP oracle results
-4. Differences are reported; LLM fixes the script
-5. Once accuracy meets threshold (>90%), golden tests are generated from oracle results
-6. Golden tests run in CI without the LSP
+2. LLM runs canopy on test files
+3. LLM queries the MCP LSP server for the same operations
+4. LLM compares results, iterates on the script
+5. Once accuracy meets threshold (>90%), LLM writes golden test fixtures (input files + expected output)
+6. Golden tests run in CI — no MCP, no LSP, just input/output comparison
 
 **Consequences:**
 - (+) Leverage LLM capability for multi-language expertise
-- (+) Objective correctness measurement via oracle comparison
+- (+) Objective correctness measurement via MCP LSP comparison
 - (+) Golden tests provide regression protection without runtime LSP dependency
-- (+) Tight iteration loop: edit script, run, compare, fix
+- (+) Zero custom LSP client code — uses existing, well-maintained MCP servers
+- (+) Tight iteration loop: edit script, run, compare via MCP, fix
 - (+) Bulk snapshot testing catches broad regressions
-- (-) Initial oracle setup requires installing and configuring 8 LSP servers
-- (-) Oracle results may differ from canopy's design intent (LSP may resolve things we deliberately skip)
 - (-) LLM-authored code needs review for correctness and maintainability
+- (-) MCP LSP server availability varies by language (some may need community-maintained servers)
 
 ## 2026-02-14: Schema designed for 13+ languages before building
 
@@ -89,12 +89,35 @@
 
 **Context:** The Go core needs to provide tree-sitter CST access and database access to Risor scripts. The options are: (a) wrap everything in custom host functions like `node_children()`, `db_symbols_by_file()`, etc., or (b) pass the actual Go objects through and let Risor call methods on them directly.
 
-**Decision:** Pass the tree-sitter Tree/Node objects and the Store object directly to Risor. No wrapper functions. The only custom host functions are `parse(path, language)` (which creates the tree-sitter Tree) and `query(node, pattern)` (which runs S-expression queries). Everything else is method calls on the real objects.
+**Decision:** Pass the tree-sitter Tree/Node objects and the Store object directly to Risor via proxy reflection. Provide thin host functions only where Risor's proxy system has limitations. Validated in `.spikes/risor-treesitter/`.
+
+Host functions (Go-side):
+- `parse(path, language)` — creates the tree-sitter Tree, captures source `[]byte`
+- `node_text(node)` — workaround: Risor can't convert string to `[]byte` for `node.Content()`
+- `query(pattern, node)` — workaround: `NewQuery`/`NewQueryCursor` are free functions Risor can't call; cursor iteration (`NextMatch()` returns `(*QueryMatch, bool)` as a list) is awkward
+
+Everything else is direct method calls on proxied CGO objects: `node.Type()`, `node.NamedChild(i)`, `node.ChildByFieldName("name")`, `node.Parent()`, `node.StartPoint()`, `node.String()`, etc.
 
 **Consequences:**
-- (+) Zero maintenance burden for wrapper functions — the API is tree-sitter's API
-- (+) Scripts have full access to tree-sitter capabilities without Go-side gatekeeping
+- (+) Minimal maintenance burden — only 3 host functions, rest is tree-sitter's own API
+- (+) Scripts have full access to tree-sitter capabilities via proxy reflection
 - (+) Store API changes automatically available to scripts (no wrapper to update)
 - (+) Less Go code to write, test, and maintain
+- (+) Spike-validated: Risor proxy works with CGO-backed go-tree-sitter objects
 - (-) Scripts must know tree-sitter's Go method names (mitigated: well-documented, and LLMs know them)
-- (-) Risor must support calling methods on Go objects (it does — this is a key Risor feature)
+- (-) Any new tree-sitter methods that take `[]byte` args would need additional host functions
+
+## 2026-02-14: LSP-shaped golden format with frozen incremental levels
+
+**Context:** Canopy needs a test corpus and expectation format that (a) LLMs can create and validate without compiling Go code, (b) doesn't break when new test cases are added, and (c) maps naturally to LSP ground-truth from MCP verification sessions.
+
+**Decision:** Use a minimal LSP-shaped JSON golden format (`golden.json`) with four top-level keys: `definitions`, `references`, `implementations`, `calls`. Three validation tiers: extraction (Tier 1), simple resolution (Tier 2), full resolution (Tier 3). Corpus is organized as frozen incremental levels per language (`testdata/{lang}/level-{N}-{name}/`). Each level is never modified once written — new constructs get new levels. A `canopy test` CLI command runs validation.
+
+**Consequences:**
+- (+) Golden format mirrors LSP responses — MCP LSP output maps directly to test expectations
+- (+) Frozen levels mean adding level N+1 never breaks levels 1..N
+- (+) LLM generates both source files and golden.json — no Go code needed for test authoring
+- (+) Single CLI command (`canopy test`) for validation — tight iteration loop
+- (+) Three tiers allow incremental validation as scripts mature
+- (-) Golden format is a subset of LSP — may need to extend it as canopy's capabilities grow
+- (-) Name-based matching (loose) could miss subtle location bugs (acceptable tradeoff for maintainability)

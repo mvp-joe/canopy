@@ -14,13 +14,20 @@
 - [ ] Implement `signature_hash` computation (composite hash of name+kind+visibility+modifiers+members+params)
 - [ ] Implement blast radius Store methods: `FilesReferencingSymbols`, `FilesImportingSource`, `DeleteResolutionDataForSymbols`, `DeleteResolutionDataForFiles`
 - [ ] Implement Engine skeleton with `New()`, `Close()`, database lifecycle
-- [ ] Implement `parse(path, language)` — tree-sitter parsing, returns Tree object directly
-- [ ] Set up Risor runtime with globals: `parse`, `db` (Store), `log`
+- [ ] Implement `parse(path, language)` — tree-sitter parsing, returns Tree object; captures source []byte for node_text
+- [ ] Implement `node_text(node)` — returns source text of a node as string ([]byte workaround)
+- [ ] Implement `query(pattern, node)` — wraps NewQuery/NewQueryCursor/NextMatch loop, returns list of match maps
+- [ ] Set up Risor runtime with globals: `parse`, `node_text`, `query`, `db` (Store), `log`
+- [ ] Implement language detection (file extension → language name mapping for script selection)
 - [ ] Implement script loading from `scripts/extract/` and `scripts/resolve/` directories
 - [ ] Create `scripts/` directory structure (`extract/`, `resolve/`, `lib/`)
 - [ ] Write unit tests for Store (round-trip insert/query for each table)
 - [ ] Write unit tests for schema migration
-- [ ] Write unit test: `parse` returns a usable tree-sitter Tree object (can call RootNode(), query methods, etc.)
+- [ ] Write unit test: `parse` returns a usable tree-sitter Tree object (can call RootNode(), node.Type(), etc. via Risor proxy)
+- [ ] Write unit test: `node_text` returns correct source text for various node types
+- [ ] Write unit test: `query` returns correct matches for S-expression patterns (function declarations, identifiers, etc.)
+- [ ] Write unit test: `query` returns empty list for no-match pattern
+- [ ] Write unit test: `query` returns error for invalid pattern
 - [ ] Write unit tests for signature_hash computation (same symbol → same hash, changed symbol → different hash)
 - [ ] Write unit tests for blast radius methods (FilesReferencingSymbols, FilesImportingSource, DeleteResolutionDataForSymbols, DeleteResolutionDataForFiles)
 
@@ -54,13 +61,15 @@
 - [ ] Write `scripts/resolve/go.risor`: interface matching (structural, implicit)
 - [ ] Write `scripts/resolve/go.risor`: call graph edge creation from resolved call references
 - [ ] Write `scripts/resolve/go.risor`: extension binding for methods on types
-- [ ] Set up gopls Oracle integration
-- [ ] Implement Comparator for definition results
-- [ ] Implement Comparator for references results
-- [ ] Run comparison against gopls on sample Go files
+- [ ] Implement `canopy test` CLI command (read fixture dirs, run canopy, diff against golden.json, report pass/fail)
+- [ ] Define golden format JSON schema (definitions, references, implementations, calls)
+- [ ] Create `testdata/go/level-01-basic-decls/` — LLM-generated source files + Tier 1 golden.json (extraction only)
+- [ ] Create `testdata/go/level-02-structs-interfaces/` — Tier 1 golden.json
+- [ ] Create `testdata/go/level-03-imports/` — Tier 1 + Tier 2 golden.json (cross-file resolution)
+- [ ] Verify Go resolution accuracy against gopls via MCP (LLM development workflow)
 - [ ] Iterate on `scripts/resolve/go.risor` until >90% accuracy on go-to-definition
 - [ ] Iterate on `scripts/resolve/go.risor` until >90% accuracy on find-references
-- [ ] Write golden tests from oracle-verified results
+- [ ] Write golden tests from MCP-verified results
 - [ ] Write regression tests for specific edge cases found during iteration
 
 ## Phase 4: Multi-language Extraction Scripts
@@ -106,14 +115,13 @@
 - [ ] Write `scripts/resolve/java.risor`: scope resolution, import resolution, class hierarchy, interface impl
 - [ ] Write `scripts/resolve/php.risor`: scope resolution, namespace/use resolution, trait inclusion
 - [ ] Write `scripts/resolve/ruby.risor`: scope resolution, require resolution, mixin inclusion, method lookup
-- [ ] Set up tsserver Oracle and validate TS/JS scripts
-- [ ] Set up pyright Oracle and validate Python scripts
-- [ ] Set up rust-analyzer Oracle and validate Rust scripts
-- [ ] Set up clangd Oracle and validate C/C++ scripts
-- [ ] Set up jdtls Oracle and validate Java scripts
-- [ ] Set up phpactor Oracle and validate PHP scripts
-- [ ] Set up solargraph Oracle and validate Ruby scripts
-- [ ] Write golden tests for each language from oracle results
+- [ ] Verify TS/JS resolution accuracy against tsserver via MCP; write golden tests
+- [ ] Verify Python resolution accuracy against pyright via MCP; write golden tests
+- [ ] Verify Rust resolution accuracy against rust-analyzer via MCP; write golden tests
+- [ ] Verify C/C++ resolution accuracy against clangd via MCP; write golden tests
+- [ ] Verify Java resolution accuracy against jdtls via MCP; write golden tests
+- [ ] Verify PHP resolution accuracy against phpactor via MCP; write golden tests
+- [ ] Verify Ruby resolution accuracy against solargraph via MCP; write golden tests
 - [ ] Iterate all resolvers to >90% accuracy
 
 ## Phase 6: Cortex Integration

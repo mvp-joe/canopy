@@ -44,10 +44,17 @@
 
 ### Tree-sitter Host Functions
 
-- `parse` returns a tree-sitter Tree object; calling `RootNode()` on it returns a valid node
-- `parse` with a Go file returns a tree whose root node kind is `source_file`
+- `parse` returns a tree-sitter Tree object; calling `RootNode()` on it returns a valid proxied node
+- `parse` with a Go file returns a tree whose root node `Type()` is `source_file`
 - `parse` with invalid source still returns a tree (tree-sitter is error-tolerant)
-- Tree-sitter query methods work on returned Tree: `(function_declaration name: (identifier) @name)` on a Go file returns all function names
+- Proxied node methods work: `node.NamedChild(0)`, `node.ChildByFieldName("name")`, `node.ChildCount()`, `node.Parent()`, `node.StartPoint()`
+- `node_text` returns correct source text for a function name node
+- `node_text` returns correct source text for a full function declaration node
+- `node_text` returns empty string for a zero-width node
+- `query` with `(function_declaration name: (identifier) @name)` on a Go file returns all function names as match maps
+- `query` with no matches returns empty list
+- `query` with invalid pattern returns an error
+- `query` match maps have capture names as keys and proxied Nodes as values
 
 ### Go Extraction Script
 
@@ -112,6 +119,16 @@
 - PHP: classes, traits, interfaces, namespaces, use statements, visibility
 - Ruby: classes, modules, methods (def, self.def), mixins (include, extend), require
 
+### QueryBuilder
+
+- `DefinitionAt`: pre-populate extraction + resolution data for a Go file with function calls; query a call site location; verify returns the target function's location
+- `ReferencesTo`: insert a symbol and multiple resolved_references targeting it; query; verify all reference locations returned
+- `Implementations`: insert an interface symbol and implementation rows; query; verify implementing type locations returned
+- `Callers`: insert call_graph edges; query by callee; verify caller locations returned
+- `Callees`: insert call_graph edges; query by caller; verify callee locations returned
+- `Dependencies`: insert imports for a file; query by file ID; verify all imports returned
+- `Dependents`: insert imports from multiple files referencing a source; query by source; verify all importing files returned
+
 ## Integration Tests
 
 ### Full Pipeline
@@ -172,38 +189,128 @@
 **When** incremental resolution runs,
 **Then** no resolution data is invalidated and no re-resolution occurs.
 
-## Oracle Comparison Tests
+## MCP-based Verification (dev-time, not CI)
 
-These tests run at development time and require a running LSP server. They verify script accuracy.
+Accuracy verification happens during LLM development sessions using MCP LSP servers. This is NOT automated test infrastructure — it's a development workflow. The LLM:
 
-### Go (gopls)
+1. Configures the relevant MCP LSP server (gopls, tsserver, pyright, etc.)
+2. Runs canopy on test files
+3. Queries the LSP via MCP for the same operations (definition, references, implementations)
+4. Compares results, iterates on the Risor script
+5. Writes golden test fixtures from verified results
 
-- For 50+ representative Go source locations, compare canopy `DefinitionAt` with gopls `textDocument/definition`
-- For 50+ representative Go source locations, compare canopy `ReferencesTo` with gopls `textDocument/references`
-- For 20+ Go interfaces, compare canopy implementations with gopls `textDocument/implementation`
-- Measure precision and recall; target >90% F1 score on each operation
+### Accuracy targets (per language)
 
-### TypeScript (tsserver)
+- go-to-definition: >90% F1 score
+- find-references: >90% F1 score
+- implementations: >90% F1 score (where applicable)
 
-- Same coverage targets as Go for TypeScript/JavaScript files
-- Additional: verify re-export resolution matches tsserver
+### Languages and MCP LSP servers
 
-### Python (pyright)
+| Language | MCP LSP Server |
+|----------|---------------|
+| Go | gopls |
+| TypeScript/JavaScript | typescript-language-server |
+| Python | pyright / pylsp |
+| Rust | rust-analyzer |
+| C/C++ | clangd |
+| Java | eclipse.jdt.ls |
+| PHP | phpactor |
+| Ruby | solargraph |
 
-- Same coverage targets as Go for Python files
-- Additional: verify decorator resolution
+## Golden Test Corpus
 
-### Other Languages
+### Corpus structure
 
-- Same pattern for Rust (rust-analyzer), C/C++ (clangd), Java (jdtls), PHP (phpactor), Ruby (solargraph)
+LLM-generated source files organized by language and complexity level. Each level is a frozen snapshot — never modified once written. New levels are added as scripts handle more constructs.
 
-## Snapshot Tests
+```
+testdata/
+  go/
+    level-01-basic-decls/
+      src/             # source files (LLM-generated)
+      golden.json      # expected output in golden format
+    level-02-structs-interfaces/
+      src/
+      golden.json
+    level-03-imports/
+      src/
+      golden.json
+    ...
+  typescript/
+    level-01-basic-decls/
+      src/
+      golden.json
+    ...
+```
 
-- Maintain a corpus of representative source files per language (5-10 files each)
-- Each file has a golden snapshot of expected extraction and resolution output
-- Snapshot runner processes all corpus files and diffs against golden data
-- Snapshots are updated explicitly when script logic improves
-- Any unintentional change to snapshot output is a test failure (regression detection)
+### Three validation tiers
+
+Each golden.json can contain expectations at any combination of tiers:
+
+**Tier 1: Extraction** — "did we find the right stuff in the file?"
+Validates that extraction scripts correctly identify symbols, scopes, references, and imports.
+
+**Tier 2: Simple resolution** — "do references point to the right symbols?"
+Validates go-to-definition and find-references within a small set of files.
+
+**Tier 3: Full resolution** — "do complex semantic operations work?"
+Validates implementations, call graph, cross-package resolution, extension bindings.
+
+Lower levels start with Tier 1 only. Higher levels add Tier 2 and 3 as resolution scripts mature.
+
+### Golden format
+
+A minimal subset of LSP-shaped data — what canopy's consumers actually care about. Not the full LSP protocol, but the spatial/relational core.
+
+```json
+{
+  "definitions": [
+    { "name": "Foo", "kind": "function", "file": "main.go", "line": 5 },
+    { "name": "Bar", "kind": "function", "file": "util.go", "line": 3 },
+    { "name": "MyStruct", "kind": "struct", "file": "types.go", "line": 1 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 10, "col": 5 },
+      "to": { "name": "Bar", "file": "util.go", "line": 3 }
+    }
+  ],
+  "implementations": [
+    { "type": "MyStruct", "interface": "Reader" }
+  ],
+  "calls": [
+    { "caller": "Foo", "callee": "Bar" }
+  ]
+}
+```
+
+Loose on purpose — line numbers but not column ranges for definitions, name-based matching where unambiguous. Strict enough to catch real bugs, loose enough that source reformatting doesn't break everything.
+
+### How golden tests are created
+
+1. LLM generates source files for a new level
+2. LLM writes the extraction/resolution script
+3. LLM queries the MCP LSP server to get ground-truth answers
+4. LLM saves the LSP answers in golden format as `golden.json`
+5. Golden test runner (`canopy test testdata/go/level-01-basic-decls/`) validates canopy output matches
+
+### Test runner
+
+A single CLI command the LLM can run locally:
+
+```
+canopy test testdata/go/level-01-basic-decls/   # test one level
+canopy test testdata/go/                         # test all Go levels
+canopy test testdata/                            # test everything
+```
+
+The runner:
+1. Reads source files from `src/`
+2. Runs canopy extraction (and resolution if golden.json has Tier 2/3 expectations)
+3. Maps canopy output to golden format
+4. Diffs against `golden.json`
+5. Reports pass/fail per expectation
 
 ## Error Scenarios
 

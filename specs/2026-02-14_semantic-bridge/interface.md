@@ -4,6 +4,8 @@
 
 These are the objects and functions available to all Risor scripts via `risor.WithGlobals()`.
 
+Risor's proxy system can call methods on go-tree-sitter CGO objects via reflection (e.g., `node.Type()`, `node.NamedChild(i)`, `node.ChildByFieldName("name")`). The host functions below exist only where Risor proxy limitations require Go-side handling: `[]byte` arguments, free constructor functions, and awkward multi-return cursor loops.
+
 ### parse
 
 Parses a source file with tree-sitter and returns the tree-sitter Tree object.
@@ -12,12 +14,43 @@ Parses a source file with tree-sitter and returns the tree-sitter Tree object.
 // parse(path string, language string) *sitter.Tree
 //
 // The returned Tree is the actual go-tree-sitter Tree object.
-// Risor scripts can call any method on it:
+// Risor scripts can call any method on it via proxy reflection:
 //   tree.RootNode()
-//   tree.RootNode().Kind()
-//   tree.RootNode().ChildCount()
-//   tree.RootNode().NamedChild(0)
+//   node.Type()
+//   node.ChildCount()
+//   node.NamedChild(0)
+//   node.ChildByFieldName("name")
+//   node.Parent()
+//   node.StartPoint(), node.EndPoint()
+//   node.String()  (S-expression)
 //   etc.
+```
+
+### node_text
+
+Returns the source text of a tree-sitter node as a string. Exists because Risor's proxy system cannot convert strings to `[]byte`, which `node.Content([]byte)` requires.
+
+```go
+// node_text(node *sitter.Node) string
+//
+// Equivalent to: string(node.Content(sourceBytes))
+// The source []byte is captured on the Go side during parse().
+```
+
+### query
+
+Runs a tree-sitter S-expression query against a node and returns structured match results. Exists because (a) `sitter.NewQuery()` and `sitter.NewQueryCursor()` are free constructor functions that Risor can't call directly, and (b) the cursor iteration pattern (`NextMatch()` returns `(*QueryMatch, bool)` as a list in Risor) is awkward to use from scripts.
+
+```go
+// query(pattern string, node *sitter.Node) []map[string]any
+//
+// Each map in the returned list represents one match.
+// Keys are capture names from the query pattern, values are proxied Nodes.
+// Example:
+//   matches := query("(function_declaration name: (identifier) @name)", root)
+//   for m in matches {
+//       print(node_text(m["name"]))
+//   }
 ```
 
 ### db

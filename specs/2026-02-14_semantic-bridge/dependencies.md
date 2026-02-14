@@ -4,25 +4,25 @@
 
 | Package | Purpose |
 |---------|---------|
-| `github.com/tree-sitter/go-tree-sitter` | Go bindings for tree-sitter parsing library. Provides `Parser`, `Tree`, `Node`, `Query`, `TreeCursor` types for CST access. CGO-based, requires `Close()` calls on all allocated objects. |
-| `github.com/tree-sitter/tree-sitter-go/bindings/go` | Tree-sitter grammar for Go |
-| `github.com/tree-sitter/tree-sitter-javascript/bindings/go` | Tree-sitter grammar for JavaScript |
-| `github.com/tree-sitter/tree-sitter-typescript/bindings/go` | Tree-sitter grammar for TypeScript |
-| `github.com/tree-sitter/tree-sitter-python/bindings/go` | Tree-sitter grammar for Python |
-| `github.com/tree-sitter/tree-sitter-rust/bindings/go` | Tree-sitter grammar for Rust |
-| `github.com/tree-sitter/tree-sitter-c/bindings/go` | Tree-sitter grammar for C |
-| `github.com/tree-sitter/tree-sitter-cpp/bindings/go` | Tree-sitter grammar for C++ |
-| `github.com/tree-sitter/tree-sitter-java/bindings/go` | Tree-sitter grammar for Java |
-| `github.com/tree-sitter/tree-sitter-php/bindings/go` | Tree-sitter grammar for PHP |
-| `github.com/tree-sitter/tree-sitter-ruby/bindings/go` | Tree-sitter grammar for Ruby |
+| `github.com/smacker/go-tree-sitter` | Go bindings for tree-sitter parsing library. Provides `Parser`, `Tree`, `Node`, `Query`, `QueryCursor` types for CST access. CGO-based, bundles C sources properly (unlike official bindings which have broken CGO includes as a Go module). |
+| `github.com/smacker/go-tree-sitter/golang` | Tree-sitter grammar for Go |
+| `github.com/smacker/go-tree-sitter/javascript` | Tree-sitter grammar for JavaScript |
+| `github.com/smacker/go-tree-sitter/typescript/typescript` | Tree-sitter grammar for TypeScript |
+| `github.com/smacker/go-tree-sitter/python` | Tree-sitter grammar for Python |
+| `github.com/smacker/go-tree-sitter/rust` | Tree-sitter grammar for Rust |
+| `github.com/smacker/go-tree-sitter/c` | Tree-sitter grammar for C |
+| `github.com/smacker/go-tree-sitter/cpp` | Tree-sitter grammar for C++ |
+| `github.com/smacker/go-tree-sitter/java` | Tree-sitter grammar for Java |
+| `github.com/smacker/go-tree-sitter/php` | Tree-sitter grammar for PHP |
+| `github.com/smacker/go-tree-sitter/ruby` | Tree-sitter grammar for Ruby |
 | `github.com/risor-io/risor` | Risor scripting language runtime. Pure Go, embeddable. Used for language-specific extraction and resolution scripts. Key API: `risor.Eval()`, `risor.WithGlobals()`, `risor.WithLocalImporter()`. Compiles to bytecode, runs on lightweight VM. |
 | `github.com/mattn/go-sqlite3` | SQLite3 driver for Go's `database/sql` interface. CGO-based, requires `CGO_ENABLED=1` and a C compiler. Supports WAL mode, transactions, and all standard SQL operations. |
 
 ## Rationale
 
-### tree-sitter/go-tree-sitter over smacker/go-tree-sitter
+### smacker/go-tree-sitter over tree-sitter/go-tree-sitter
 
-`github.com/tree-sitter/go-tree-sitter` is the official tree-sitter Go binding maintained by the tree-sitter organization. The `smacker/go-tree-sitter` package is an older community binding. The official package has better alignment with upstream tree-sitter releases and grammar packages. Grammar packages use the `github.com/tree-sitter/tree-sitter-{lang}/bindings/go` import path convention.
+`github.com/smacker/go-tree-sitter` is the community-maintained Go binding that bundles C sources correctly. The official `github.com/tree-sitter/go-tree-sitter` package has broken CGO includes when used as a Go module dependency (`#include "../../src/parser.c"` doesn't resolve). Validated in `.spikes/risor-treesitter/`. The smacker package is widely used, actively maintained, and bundles grammar packages as sub-packages (e.g., `github.com/smacker/go-tree-sitter/golang`).
 
 ### Risor over alternatives (Tengo, Expr, Starlark, Lua)
 
