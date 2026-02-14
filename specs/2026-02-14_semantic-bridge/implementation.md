@@ -3,7 +3,7 @@
 ## Phase 1: Foundation
 
 - [ ] Initialize Go module structure (packages: `canopy`, `internal/store`, `internal/runtime`)
-- [ ] Add tree-sitter dependency (`github.com/tree-sitter/go-tree-sitter`)
+- [ ] Add tree-sitter dependency (`github.com/smacker/go-tree-sitter`)
 - [ ] Add tree-sitter grammar dependencies for all initial languages
 - [ ] Add Risor dependency (`github.com/risor-io/risor`)
 - [ ] Add SQLite driver dependency (`github.com/mattn/go-sqlite3`)
@@ -14,6 +14,9 @@
 - [ ] Implement `signature_hash` computation (composite hash of name+kind+visibility+modifiers+members+params)
 - [ ] Implement blast radius Store methods: `FilesReferencingSymbols`, `FilesImportingSource`, `DeleteResolutionDataForSymbols`, `DeleteResolutionDataForFiles`
 - [ ] Implement Engine skeleton with `New()`, `Close()`, database lifecycle
+- [ ] Implement `Engine.IndexFiles()` — file hashing, change detection, extraction script dispatch per language
+- [ ] Implement `Engine.IndexDirectory()` — file discovery, language detection, delegates to IndexFiles
+- [ ] Implement `Engine.Resolve()` — runs resolution scripts per language, blast radius computation for incremental re-resolution
 - [ ] Implement `parse(path, language)` — tree-sitter parsing, returns Tree object; captures source []byte for node_text
 - [ ] Implement `node_text(node)` — returns source text of a node as string ([]byte workaround)
 - [ ] Implement `query(pattern, node)` — wraps NewQuery/NewQueryCursor/NextMatch loop, returns list of match maps

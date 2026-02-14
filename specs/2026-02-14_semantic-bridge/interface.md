@@ -62,7 +62,7 @@ The Store object, exposed directly. Risor scripts call methods on it.
 Logging functions: `log.info(msg)`, `log.warn(msg)`, `log.error(msg)`.
 
 ---
-
+git@github.com:mvp-joe/claude-plugins.git
 ## Store
 
 ```go
@@ -74,7 +74,6 @@ type Store struct {
 
 func NewStore(dbPath string) (*Store, error)
 func (s *Store) Migrate() error
-func (s *Store) Begin() (*sql.Tx, error)
 func (s *Store) Close() error
 
 // File operations
@@ -162,7 +161,7 @@ func (s *Store) TypeCompositions(compositeSymbolID int64) ([]*TypeComposition, e
 
 func (s *Store) FilesReferencingSymbols(symbolIDs []int64) ([]int64, error)  // file IDs with resolved_references targeting these symbols
 func (s *Store) FilesImportingSource(source string) ([]int64, error)         // file IDs that import this module/package
-func (s *Store) DeleteResolutionDataForSymbols(symbolIDs []int64) error      // remove resolved_references, call_graph, implementations, extension_bindings targeting these symbols
+func (s *Store) DeleteResolutionDataForSymbols(symbolIDs []int64) error      // remove resolved_references, call_graph, implementations, extension_bindings, reexports, type_compositions targeting these symbols
 func (s *Store) DeleteResolutionDataForFiles(fileIDs []int64) error          // remove all resolution data originating from these files
 ```
 

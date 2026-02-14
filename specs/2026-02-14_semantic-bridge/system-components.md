@@ -29,7 +29,7 @@ Top-level orchestrator. Manages the pipeline: file discovery, change detection, 
 **Responsibilities:**
 - Initialize and manage the SQLite database (create, migrate, open)
 - Detect changed files (hash comparison), skip unchanged
-- Parse files with tree-sitter, pass Tree objects to extraction scripts
+- Make `parse()` available to extraction scripts; scripts call it to get Tree objects
 - Execute resolution scripts after extraction
 - Expose query API for cortex
 
@@ -67,11 +67,11 @@ All language-specific logic lives in Risor. Two categories of scripts:
 
 ### Extraction Scripts (`scripts/extract/`)
 
-One per language. Receives a parsed tree-sitter Tree and the Store. Walks the CST (via direct tree-sitter API calls or S-expression queries) and writes to extraction tables.
+One per language. Calls `parse()` to get a tree-sitter Tree, uses `db` to write to extraction tables. Walks the CST via direct tree-sitter API calls, `query()` for S-expression queries, and `node_text()` for source text.
 
 Each extraction script:
-1. Receives the Tree object for a file
-2. Uses tree-sitter queries or node traversal to find declarations, references, imports, scopes
+1. Calls `parse(path, language)` to get the Tree object
+2. Uses `query()` and node traversal to find declarations, references, imports, scopes
 3. Writes symbols, scopes, references, imports, type_members, function_parameters, type_parameters, annotations, symbol_fragments to the Store
 
 Script files:

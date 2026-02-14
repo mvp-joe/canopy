@@ -379,6 +379,8 @@ When a file changes, canopy computes a blast radius to minimize re-resolution wo
    - Delete call_graph edges involving removed symbols
    - Delete implementations involving removed symbols
    - Delete extension_bindings involving removed symbols
+   - Delete reexports referencing removed symbols
+   - Delete type_compositions referencing removed symbols
 6. Replace extraction data (delete old, insert new)
 7. Re-resolve only files in blast_radius
 ```

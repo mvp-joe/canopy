@@ -20,6 +20,7 @@
 - Insert call graph edges; query callers and callees
 - Insert reexports; query by file
 - Insert extension bindings; query by member and by extended type
+- Insert type compositions; query by composite symbol ID; verify component symbols returned
 - Schema migration on empty database; verify all 16 tables exist with correct columns
 - Schema migration is idempotent (running twice does not error)
 - WAL mode is enabled after migration
