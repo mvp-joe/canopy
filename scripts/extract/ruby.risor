@@ -1,0 +1,599 @@
+// Ruby language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the Ruby source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+// Extract method parameters from a method_parameters node.
+func extract_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    pt := param.Type()
+
+    if pt == "identifier" {
+      insert_function_param({
+        symbol_id: sym_id,
+        name: node_text(param),
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    } else if pt == "optional_parameter" {
+      p_name_node := param.NamedChild(0)
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+
+      // Get default value (second named child)
+      default_expr := ""
+      has_default := false
+      if int(param.NamedChildCount()) > 1 {
+        default_node := param.NamedChild(1)
+        default_expr = node_text(default_node)
+        has_default = true
+      }
+
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+        has_default: has_default,
+        default_expr: default_expr,
+      })
+      ordinal = ordinal + 1
+    } else if pt == "splat_parameter" || pt == "hash_splat_parameter" || pt == "block_parameter" || pt == "keyword_parameter" {
+      p_name_node := param.NamedChild(0)
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    }
+  }
+}
+
+// Track current visibility state for methods within a class/module body.
+// Ruby uses "private" / "protected" / "public" as method calls that change
+// the default visibility for subsequent methods.
+func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
+  current_visibility := "public"
+  count := int(body_node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := body_node.NamedChild(i)
+    ct := child.Type()
+
+    if ct == "identifier" {
+      text := node_text(child)
+      if text == "private" || text == "protected" || text == "public" {
+        current_visibility = text
+        continue
+      }
+    }
+
+    if ct == "method" {
+      nn := child.NamedChild(0)
+      if nn == nil {
+        continue
+      }
+      name := node_text(nn)
+
+      sym_map := {
+        file_id: file_id,
+        name: name,
+        kind: "method",
+        visibility: current_visibility,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
+      if parent_sym_id != nil {
+        sym_map["parent_symbol_id"] = parent_sym_id
+      }
+      sym_id := insert_symbol(sym_map)
+
+      // Extract params
+      mp := node_child(child, "parameters")
+      if mp != nil {
+        extract_params(sym_id, mp)
+      }
+
+      // Method scope
+      meth_scope_map := {
+        file_id: file_id,
+        kind: "function",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+        symbol_id: sym_id,
+      }
+      insert_scope(meth_scope_map)
+    }
+
+    if ct == "singleton_method" {
+      // self.method_name
+      name_child := node_child(child, "name")
+      if name_child == nil {
+        // Try second named child (first is "self")
+        if int(child.NamedChildCount()) > 1 {
+          name_child = child.NamedChild(1)
+        }
+      }
+      if name_child == nil {
+        continue
+      }
+      name := node_text(name_child)
+
+      sym_map := {
+        file_id: file_id,
+        name: name,
+        kind: "method",
+        visibility: current_visibility,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
+      if parent_sym_id != nil {
+        sym_map["parent_symbol_id"] = parent_sym_id
+      }
+      sym_id := insert_symbol(sym_map)
+
+      // Extract params
+      mp := node_child(child, "parameters")
+      if mp != nil {
+        extract_params(sym_id, mp)
+      }
+
+      meth_scope_map := {
+        file_id: file_id,
+        kind: "function",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+        symbol_id: sym_id,
+      }
+      insert_scope(meth_scope_map)
+    }
+
+    // include/extend/prepend as type_members
+    if ct == "call" {
+      call_name_node := child.NamedChild(0)
+      if call_name_node != nil && call_name_node.Type() == "identifier" {
+        call_name := node_text(call_name_node)
+        if call_name == "include" || call_name == "extend" || call_name == "prepend" {
+          arg_list_node := child.NamedChild(1)
+          if arg_list_node != nil && arg_list_node.Type() == "argument_list" {
+            arg_count := int(arg_list_node.NamedChildCount())
+            for j := 0; j < arg_count; j++ {
+              arg := arg_list_node.NamedChild(j)
+              if arg.Type() == "constant" || arg.Type() == "scope_resolution" {
+                insert_type_member({
+                  symbol_id: parent_sym_id,
+                  name: node_text(arg),
+                  kind: "embedded",
+                  type_expr: node_text(arg),
+                  visibility: "public",
+                })
+              }
+            }
+          }
+        }
+
+        // attr_reader, attr_writer, attr_accessor as properties
+        if call_name == "attr_reader" || call_name == "attr_writer" || call_name == "attr_accessor" {
+          arg_list_node := child.NamedChild(1)
+          if arg_list_node != nil && arg_list_node.Type() == "argument_list" {
+            arg_count := int(arg_list_node.NamedChildCount())
+            for j := 0; j < arg_count; j++ {
+              arg := arg_list_node.NamedChild(j)
+              if arg.Type() == "simple_symbol" {
+                sym_text := node_text(arg)
+                // Strip leading ':'
+                if len(sym_text) > 0 && sym_text[0] == ":" {
+                  sym_text = sym_text[1:]
+                }
+                insert_type_member({
+                  symbol_id: parent_sym_id,
+                  name: sym_text,
+                  kind: "property",
+                  type_expr: "",
+                  visibility: "public",
+                })
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Constants in class body
+    if ct == "assignment" {
+      lhs := child.NamedChild(0)
+      if lhs != nil && lhs.Type() == "constant" {
+        const_name := node_text(lhs)
+        insert_type_member({
+          symbol_id: parent_sym_id,
+          name: const_name,
+          kind: "constant",
+          type_expr: "",
+          visibility: "public",
+        })
+      }
+    }
+  }
+}
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "ruby")
+root := tree.RootNode()
+
+// --- Require/require_relative (imports) ---
+// require 'foo' and require_relative 'bar' are `call` nodes at top level.
+req_matches := query("(call (identifier) @fn (argument_list (string (string_content) @path))) @req", root)
+for _, m := range req_matches {
+  fn_node := m["fn"]
+  path_node := m["path"]
+  fn_name := node_text(fn_node)
+
+  if fn_name == "require" || fn_name == "require_relative" {
+    source := node_text(path_node)
+    kind := "module"
+    if fn_name == "require_relative" {
+      kind = "relative"
+    }
+
+    // Extract imported name (last segment)
+    parts := strings.split(source, "/")
+    imported_name := parts[len(parts)-1]
+
+    insert_import({
+      file_id: file_id,
+      source: source,
+      imported_name: imported_name,
+      kind: kind,
+      scope: "file",
+    })
+  }
+}
+
+// --- Module declarations ---
+mod_matches := query("(module name: (constant) @name) @mod", root)
+for _, m := range mod_matches {
+  name_node := m["name"]
+  mod_node := m["mod"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "module",
+    visibility: "public",
+    start_line: start_line(mod_node),
+    start_col: start_col(mod_node),
+    end_line: end_line(mod_node),
+    end_col: end_col(mod_node),
+  })
+}
+
+// --- Class declarations ---
+class_matches := query("(class name: (constant) @name) @class", root)
+for _, m := range class_matches {
+  name_node := m["name"]
+  class_node := m["class"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "class",
+    visibility: "public",
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+  })
+}
+
+// --- Top-level method definitions ---
+// Only match methods that are direct children of the program node.
+root_count := int(root.NamedChildCount())
+for i := 0; i < root_count; i++ {
+  child := root.NamedChild(i)
+  if child.Type() == "method" {
+    nn := child.NamedChild(0)
+    if nn == nil {
+      continue
+    }
+    name := node_text(nn)
+
+    sym_id := insert_symbol({
+      file_id: file_id,
+      name: name,
+      kind: "function",
+      visibility: "public",
+      start_line: start_line(child),
+      start_col: start_col(child),
+      end_line: end_line(child),
+      end_col: end_col(child),
+    })
+
+    mp := node_child(child, "parameters")
+    if mp != nil {
+      extract_params(sym_id, mp)
+    }
+  }
+}
+
+// --- Scope tree ---
+file_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "file",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Module scopes and their body extraction
+for _, m := range mod_matches {
+  mod_node := m["mod"]
+  mod_name := node_text(m["name"])
+  mod_sym_id := find_symbol_id(mod_name)
+
+  mod_scope_map := {
+    file_id: file_id,
+    kind: "module",
+    start_line: start_line(mod_node),
+    start_col: start_col(mod_node),
+    end_line: end_line(mod_node),
+    end_col: end_col(mod_node),
+    parent_scope_id: file_scope_id,
+  }
+  if mod_sym_id != nil {
+    mod_scope_map["symbol_id"] = mod_sym_id
+  }
+  mod_scope_id := insert_scope(mod_scope_map)
+
+  // Extract body contents (methods, etc.)
+  body_node := node_child(mod_node, "body")
+  if body_node != nil {
+    extract_class_body(mod_sym_id, body_node, mod_scope_id)
+  }
+}
+
+// Class scopes and their body extraction
+for _, m := range class_matches {
+  class_node := m["class"]
+  class_name := node_text(m["name"])
+  class_sym_id := find_symbol_id(class_name)
+
+  class_scope_map := {
+    file_id: file_id,
+    kind: "class",
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+    parent_scope_id: file_scope_id,
+  }
+  if class_sym_id != nil {
+    class_scope_map["symbol_id"] = class_sym_id
+  }
+  class_scope_id := insert_scope(class_scope_map)
+
+  // Extract body contents
+  body_node := node_child(class_node, "body")
+  if body_node != nil {
+    extract_class_body(class_sym_id, body_node, class_scope_id)
+  }
+
+  // Superclass reference
+  super_node := node_child(class_node, "superclass")
+  if super_node != nil {
+    // superclass node wraps "< ClassName" - get the constant child
+    super_count := int(super_node.NamedChildCount())
+    for j := 0; j < super_count; j++ {
+      sc := super_node.NamedChild(j)
+      if sc.Type() == "constant" {
+        insert_reference({
+          file_id: file_id,
+          name: node_text(sc),
+          context: "type_annotation",
+          start_line: start_line(sc),
+          start_col: start_col(sc),
+          end_line: end_line(sc),
+          end_col: end_col(sc),
+        })
+      }
+    }
+  }
+}
+
+// Top-level function scopes
+for i := 0; i < root_count; i++ {
+  child := root.NamedChild(i)
+  if child.Type() == "method" {
+    nn := child.NamedChild(0)
+    fn_sym_id := nil
+    if nn != nil {
+      fn_sym_id = find_symbol_id(node_text(nn))
+    }
+    scope_map := {
+      file_id: file_id,
+      kind: "function",
+      start_line: start_line(child),
+      start_col: start_col(child),
+      end_line: end_line(child),
+      end_col: end_col(child),
+      parent_scope_id: file_scope_id,
+    }
+    if fn_sym_id != nil {
+      scope_map["symbol_id"] = fn_sym_id
+    }
+    insert_scope(scope_map)
+  }
+}
+
+// --- References ---
+
+// Method calls: obj.method or obj.method(args)
+// In Ruby, calls are unified. A `call` node with a receiver (first child)
+// that is not an identifier matching require/require_relative/include/etc.
+call_matches := query("(call) @call", root)
+for _, m := range call_matches {
+  call_node := m["call"]
+  cc := int(call_node.NamedChildCount())
+  if cc < 2 {
+    continue
+  }
+
+  receiver := call_node.NamedChild(0)
+  method_name_node := call_node.NamedChild(1)
+
+  // Skip if this is a keyword-style call (require, include, etc.)
+  if receiver.Type() == "identifier" {
+    recv_text := node_text(receiver)
+    if recv_text == "require" || recv_text == "require_relative" || recv_text == "include" || recv_text == "extend" || recv_text == "prepend" || recv_text == "attr_reader" || recv_text == "attr_writer" || recv_text == "attr_accessor" || recv_text == "puts" || recv_text == "print" || recv_text == "raise" || recv_text == "lambda" {
+      continue
+    }
+  }
+
+  if method_name_node.Type() == "identifier" {
+    insert_reference({
+      file_id: file_id,
+      name: node_text(method_name_node),
+      context: "call",
+      start_line: start_line(method_name_node),
+      start_col: start_col(method_name_node),
+      end_line: end_line(method_name_node),
+      end_col: end_col(method_name_node),
+    })
+  }
+
+  // If the receiver is a constant (ClassName.method), also reference it
+  if receiver.Type() == "constant" {
+    insert_reference({
+      file_id: file_id,
+      name: node_text(receiver),
+      context: "type_annotation",
+      start_line: start_line(receiver),
+      start_col: start_col(receiver),
+      end_line: end_line(receiver),
+      end_col: end_col(receiver),
+    })
+  }
+}
+
+// Standalone constant references (not in declarations)
+const_ref_matches := query("(constant) @const", root)
+for _, m := range const_ref_matches {
+  const_node := m["const"]
+  const_name := node_text(const_node)
+
+  // Skip if parent is class/module declaration (name position)
+  parent := const_node.Parent()
+  if parent != nil {
+    pt := parent.Type()
+    if pt == "class" || pt == "module" {
+      // Check if this is the name field (first named child)
+      first := parent.NamedChild(0)
+      if first != nil && node_text(first) == const_name {
+        continue
+      }
+    }
+    // Skip constant assignments in class body (those are type_members)
+    if pt == "assignment" {
+      lhs := parent.NamedChild(0)
+      if lhs != nil && node_text(lhs) == const_name {
+        continue
+      }
+    }
+    // Skip superclass node (handled separately above)
+    if pt == "superclass" {
+      continue
+    }
+    // Skip argument_list for include/extend/prepend (already handled as type_members)
+    if pt == "argument_list" {
+      gp := parent.Parent()
+      if gp != nil && gp.Type() == "call" {
+        first := gp.NamedChild(0)
+        if first != nil && first.Type() == "identifier" {
+          fn_name := node_text(first)
+          if fn_name == "include" || fn_name == "extend" || fn_name == "prepend" {
+            continue
+          }
+        }
+      }
+    }
+  }
+
+  insert_reference({
+    file_id: file_id,
+    name: const_name,
+    context: "type_annotation",
+    start_line: start_line(const_node),
+    start_col: start_col(const_node),
+    end_line: end_line(const_node),
+    end_col: end_col(const_node),
+  })
+}

@@ -1,0 +1,717 @@
+// PHP language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the PHP source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+// PHP visibility: everything is public unless explicitly marked otherwise.
+func extract_visibility(node) {
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    t := child.Type()
+    if t == "visibility_modifier" {
+      return node_text(child)
+    }
+  }
+  return "public"
+}
+
+// Extract modifiers (static, abstract, final) from a node.
+func extract_modifiers(node) {
+  mods := []
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    t := child.Type()
+    if t == "static_modifier" {
+      mods = mods.append("static")
+    } else if t == "abstract_modifier" {
+      mods = mods.append("abstract")
+    } else if t == "final_modifier" {
+      mods = mods.append("final")
+    }
+  }
+  return mods
+}
+
+func has_modifier(node, mod_type) {
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    if child.Type() == mod_type {
+      return true
+    }
+  }
+  return false
+}
+
+// Extract method parameters from a formal_parameters node.
+func extract_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    if param.Type() != "simple_parameter" {
+      continue
+    }
+
+    // Get type hint
+    type_expr := ""
+    p_count := int(param.NamedChildCount())
+    for j := 0; j < p_count; j++ {
+      child := param.NamedChild(j)
+      ct := child.Type()
+      if ct == "primitive_type" || ct == "named_type" || ct == "optional_type" || ct == "union_type" || ct == "intersection_type" {
+        type_expr = node_text(child)
+      }
+    }
+
+    // Get parameter name (variable_name node)
+    var_node := node_child(param, "name")
+    param_name := ""
+    if var_node != nil {
+      raw := node_text(var_node)
+      // Strip leading $
+      if len(raw) > 0 && raw[0] == "$" {
+        param_name = raw[1:]
+      } else {
+        param_name = raw
+      }
+    }
+
+    // Check for default value
+    has_default := false
+    default_expr := ""
+    for j := 0; j < p_count; j++ {
+      child := param.NamedChild(j)
+      ct := child.Type()
+      // The default value is the last child that is not a type or variable_name
+      if ct != "primitive_type" && ct != "named_type" && ct != "optional_type" && ct != "union_type" && ct != "intersection_type" && ct != "variable_name" {
+        has_default = true
+        default_expr = node_text(child)
+      }
+    }
+
+    param_map := {
+      symbol_id: sym_id,
+      name: param_name,
+      ordinal: ordinal,
+      type_expr: type_expr,
+      is_receiver: false,
+      is_return: false,
+      has_default: has_default,
+    }
+    if has_default {
+      param_map["default_expr"] = default_expr
+    }
+    insert_function_param(param_map)
+    ordinal = ordinal + 1
+  }
+}
+
+// Extract return type from a method/function node.
+func extract_return_type(sym_id, node) {
+  // Return type appears after formal_parameters. In the AST it is a direct
+  // named child that is a type node (primitive_type, named_type, etc.)
+  count := int(node.NamedChildCount())
+  past_params := false
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    ct := child.Type()
+    if ct == "formal_parameters" {
+      past_params = true
+      continue
+    }
+    if past_params {
+      if ct == "primitive_type" || ct == "named_type" || ct == "optional_type" || ct == "union_type" || ct == "intersection_type" {
+        insert_function_param({
+          symbol_id: sym_id,
+          name: "",
+          ordinal: 0,
+          type_expr: node_text(child),
+          is_receiver: false,
+          is_return: true,
+        })
+        return nil
+      }
+      // compound_statement means we passed the return type position
+      if ct == "compound_statement" {
+        return nil
+      }
+    }
+  }
+  return nil
+}
+
+// Extract methods from a declaration_list (class/trait/interface body).
+func extract_methods(parent_sym_id, decl_list, container_kind) {
+  method_matches := query("(method_declaration) @method", decl_list)
+  for _, m := range method_matches {
+    method_node := m["method"]
+    nn := node_child(method_node, "name")
+    if nn == nil {
+      continue
+    }
+    name := node_text(nn)
+    vis := extract_visibility(method_node)
+
+    kind := "method"
+
+    sym_map := {
+      file_id: file_id,
+      name: name,
+      kind: kind,
+      visibility: vis,
+      start_line: start_line(method_node),
+      start_col: start_col(method_node),
+      end_line: end_line(method_node),
+      end_col: end_col(method_node),
+    }
+    if parent_sym_id != nil {
+      sym_map["parent_symbol_id"] = parent_sym_id
+    }
+    sym_id := insert_symbol(sym_map)
+
+    // Extract parameters
+    params_node := node_child(method_node, "parameters")
+    if params_node != nil {
+      extract_params(sym_id, params_node)
+    }
+
+    // Extract return type
+    extract_return_type(sym_id, method_node)
+  }
+}
+
+// Extract properties from a declaration_list.
+func extract_properties(parent_sym_id, decl_list) {
+  prop_matches := query("(property_declaration) @prop", decl_list)
+  for _, m := range prop_matches {
+    prop_node := m["prop"]
+    vis := extract_visibility(prop_node)
+
+    // Get the type
+    type_expr := ""
+    pcount := int(prop_node.NamedChildCount())
+    for j := 0; j < pcount; j++ {
+      child := prop_node.NamedChild(j)
+      ct := child.Type()
+      if ct == "primitive_type" || ct == "named_type" || ct == "optional_type" || ct == "union_type" {
+        type_expr = node_text(child)
+      }
+    }
+
+    // Get the property name from property_element
+    elem_matches := query("(property_element (variable_name) @var) @elem", prop_node)
+    for _, em := range elem_matches {
+      var_node := em["var"]
+      raw := node_text(var_node)
+      prop_name := raw
+      if len(raw) > 0 && raw[0] == "$" {
+        prop_name = raw[1:]
+      }
+
+      insert_type_member({
+        symbol_id: parent_sym_id,
+        name: prop_name,
+        kind: "property",
+        type_expr: type_expr,
+        visibility: vis,
+      })
+    }
+  }
+}
+
+// Extract class constants from a declaration_list.
+func extract_class_constants(parent_sym_id, decl_list) {
+  const_matches := query("(const_declaration) @const_decl", decl_list)
+  for _, m := range const_matches {
+    const_node := m["const_decl"]
+    vis := extract_visibility(const_node)
+
+    elem_matches := query("(const_element (name) @name) @elem", const_node)
+    for _, em := range elem_matches {
+      name_node := em["name"]
+      insert_type_member({
+        symbol_id: parent_sym_id,
+        name: node_text(name_node),
+        kind: "constant",
+        type_expr: "",
+        visibility: vis,
+      })
+    }
+  }
+}
+
+// Extract use declarations (trait use) from a declaration_list.
+func extract_use_traits(parent_sym_id, decl_list) {
+  use_matches := query("(use_declaration (name) @name)", decl_list)
+  for _, m := range use_matches {
+    name_node := m["name"]
+    insert_type_member({
+      symbol_id: parent_sym_id,
+      name: node_text(name_node),
+      kind: "embedded",
+      type_expr: node_text(name_node),
+      visibility: "public",
+    })
+  }
+}
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "php")
+root := tree.RootNode()
+
+// --- Namespace ---
+ns_matches := query("(namespace_definition (namespace_name) @name) @ns", root)
+for _, m := range ns_matches {
+  ns_node := m["ns"]
+  name_node := m["name"]
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "namespace",
+    visibility: "public",
+    start_line: start_line(ns_node),
+    start_col: start_col(ns_node),
+    end_line: end_line(ns_node),
+    end_col: end_col(ns_node),
+  })
+}
+
+// --- Use statements (imports) ---
+use_matches := query("(namespace_use_declaration) @use_decl", root)
+for _, m := range use_matches {
+  use_node := m["use_decl"]
+  clause_matches := query("(namespace_use_clause) @clause", use_node)
+  for _, cm := range clause_matches {
+    clause_node := cm["clause"]
+    full_text := node_text(clause_node)
+
+    // Extract the simple name (last segment after \)
+    parts := strings.split(full_text, "\\")
+    imported_name := parts[len(parts)-1]
+
+    // Check for alias (as clause)
+    alias := ""
+    // The qualified_name contains the full path
+    source := strings.replace_all(full_text, "\\", "\\")
+
+    imp := {
+      file_id: file_id,
+      source: source,
+      imported_name: imported_name,
+      kind: "type",
+      scope: "file",
+    }
+    if alias != "" {
+      imp["local_alias"] = alias
+    }
+    insert_import(imp)
+  }
+}
+
+// --- Top-level const declarations ---
+toplevel_const_matches := query("(const_declaration (const_element (name) @name) @elem) @decl", root)
+for _, m := range toplevel_const_matches {
+  name_node := m["name"]
+  decl_node := m["decl"]
+
+  // Skip if parent is a declaration_list (class const)
+  parent := decl_node.Parent()
+  if parent != nil && parent.Type() == "declaration_list" {
+    continue
+  }
+
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "constant",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+}
+
+// --- Interface declarations ---
+iface_matches := query("(interface_declaration name: (name) @name body: (declaration_list) @body) @iface", root)
+for _, m := range iface_matches {
+  name_node := m["name"]
+  iface_node := m["iface"]
+  body_node := m["body"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "interface",
+    visibility: "public",
+    start_line: start_line(iface_node),
+    start_col: start_col(iface_node),
+    end_line: end_line(iface_node),
+    end_col: end_col(iface_node),
+  })
+
+  extract_methods(sym_id, body_node, "interface")
+}
+
+// --- Trait declarations ---
+trait_matches := query("(trait_declaration name: (name) @name body: (declaration_list) @body) @trait", root)
+for _, m := range trait_matches {
+  name_node := m["name"]
+  trait_node := m["trait"]
+  body_node := m["body"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "trait",
+    visibility: "public",
+    start_line: start_line(trait_node),
+    start_col: start_col(trait_node),
+    end_line: end_line(trait_node),
+    end_col: end_col(trait_node),
+  })
+
+  extract_methods(sym_id, body_node, "trait")
+}
+
+// --- Class declarations ---
+class_matches := query("(class_declaration name: (name) @name body: (declaration_list) @body) @class", root)
+for _, m := range class_matches {
+  name_node := m["name"]
+  class_node := m["class"]
+  body_node := m["body"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "class",
+    visibility: "public",
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+  })
+
+  extract_methods(sym_id, body_node, "class")
+  extract_properties(sym_id, body_node)
+  extract_class_constants(sym_id, body_node)
+  extract_use_traits(sym_id, body_node)
+}
+
+// --- Function definitions (top-level) ---
+func_matches := query("(function_definition name: (name) @name) @func", root)
+for _, m := range func_matches {
+  name_node := m["name"]
+  func_node := m["func"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "function",
+    visibility: "public",
+    start_line: start_line(func_node),
+    start_col: start_col(func_node),
+    end_line: end_line(func_node),
+    end_col: end_col(func_node),
+  })
+
+  params_node := node_child(func_node, "parameters")
+  if params_node != nil {
+    extract_params(sym_id, params_node)
+  }
+
+  extract_return_type(sym_id, func_node)
+}
+
+// --- Scope tree ---
+file_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "file",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Namespace scope
+for _, m := range ns_matches {
+  ns_node := m["ns"]
+  ns_name_node := m["name"]
+  ns_sym_id := find_symbol_id(node_text(ns_name_node))
+  scope_map := {
+    file_id: file_id,
+    kind: "namespace",
+    start_line: start_line(ns_node),
+    start_col: start_col(ns_node),
+    end_line: end_line(ns_node),
+    end_col: end_col(ns_node),
+    parent_scope_id: file_scope_id,
+  }
+  if ns_sym_id != nil {
+    scope_map["symbol_id"] = ns_sym_id
+  }
+  insert_scope(scope_map)
+}
+
+// Class scopes
+for _, m := range class_matches {
+  class_node := m["class"]
+  c_name := node_text(m["name"])
+  c_sym_id := find_symbol_id(c_name)
+  scope_map := {
+    file_id: file_id,
+    kind: "class",
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+    parent_scope_id: file_scope_id,
+  }
+  if c_sym_id != nil {
+    scope_map["symbol_id"] = c_sym_id
+  }
+  class_scope_id := insert_scope(scope_map)
+
+  // Method scopes within the class
+  body_node := m["body"]
+  method_ms := query("(method_declaration) @method", body_node)
+  for _, mm := range method_ms {
+    meth_node := mm["method"]
+    meth_nn := node_child(meth_node, "name")
+    meth_sym_id := nil
+    if meth_nn != nil {
+      meth_sym_id = find_symbol_id(node_text(meth_nn))
+    }
+    meth_scope_map := {
+      file_id: file_id,
+      kind: "function",
+      start_line: start_line(meth_node),
+      start_col: start_col(meth_node),
+      end_line: end_line(meth_node),
+      end_col: end_col(meth_node),
+      parent_scope_id: class_scope_id,
+    }
+    if meth_sym_id != nil {
+      meth_scope_map["symbol_id"] = meth_sym_id
+    }
+    insert_scope(meth_scope_map)
+  }
+}
+
+// Trait scopes
+for _, m := range trait_matches {
+  trait_node := m["trait"]
+  t_name := node_text(m["name"])
+  t_sym_id := find_symbol_id(t_name)
+  scope_map := {
+    file_id: file_id,
+    kind: "class",
+    start_line: start_line(trait_node),
+    start_col: start_col(trait_node),
+    end_line: end_line(trait_node),
+    end_col: end_col(trait_node),
+    parent_scope_id: file_scope_id,
+  }
+  if t_sym_id != nil {
+    scope_map["symbol_id"] = t_sym_id
+  }
+  insert_scope(scope_map)
+}
+
+// Interface scopes
+for _, m := range iface_matches {
+  iface_node := m["iface"]
+  i_name := node_text(m["name"])
+  i_sym_id := find_symbol_id(i_name)
+  scope_map := {
+    file_id: file_id,
+    kind: "class",
+    start_line: start_line(iface_node),
+    start_col: start_col(iface_node),
+    end_line: end_line(iface_node),
+    end_col: end_col(iface_node),
+    parent_scope_id: file_scope_id,
+  }
+  if i_sym_id != nil {
+    scope_map["symbol_id"] = i_sym_id
+  }
+  insert_scope(scope_map)
+}
+
+// Top-level function scopes
+for _, m := range func_matches {
+  fn_node := m["func"]
+  fn_nn := node_child(fn_node, "name")
+  fn_sym_id := nil
+  if fn_nn != nil {
+    fn_sym_id = find_symbol_id(node_text(fn_nn))
+  }
+  scope_map := {
+    file_id: file_id,
+    kind: "function",
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+    parent_scope_id: file_scope_id,
+  }
+  if fn_sym_id != nil {
+    scope_map["symbol_id"] = fn_sym_id
+  }
+  insert_scope(scope_map)
+}
+
+// --- References ---
+
+// Function calls: helper(42)
+fcall_matches := query("(function_call_expression function: (name) @name) @call", root)
+for _, m := range fcall_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Method calls: $obj->method()
+mcall_matches := query("(member_call_expression name: (name) @name) @call", root)
+for _, m := range mcall_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Static calls: Class::method()
+scall_matches := query("(scoped_call_expression scope: (name) @scope name: (name) @name) @call", root)
+for _, m := range scall_matches {
+  scope_node := m["scope"]
+  name_node := m["name"]
+  // Insert reference for the class
+  insert_reference({
+    file_id: file_id,
+    name: node_text(scope_node),
+    context: "type_annotation",
+    start_line: start_line(scope_node),
+    start_col: start_col(scope_node),
+    end_line: end_line(scope_node),
+    end_col: end_col(scope_node),
+  })
+  // Insert reference for the method
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Object creation: new ClassName()
+new_matches := query("(object_creation_expression (name) @name)", root)
+for _, m := range new_matches {
+  name_node := m["name"]
+  text := node_text(name_node)
+  // Skip "static" and "self" keywords
+  if text != "static" && text != "self" && text != "parent" {
+    insert_reference({
+      file_id: file_id,
+      name: text,
+      context: "type_annotation",
+      start_line: start_line(name_node),
+      start_col: start_col(name_node),
+      end_line: end_line(name_node),
+      end_col: end_col(name_node),
+    })
+  }
+}
+
+// Type annotations in class_interface_clause: implements X
+impl_matches := query("(class_interface_clause (name) @name)", root)
+for _, m := range impl_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "type_annotation",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Base class references in class_declaration
+base_matches := query("(class_declaration (base_clause (name) @name))", root)
+for _, m := range base_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "type_annotation",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}

@@ -1,0 +1,754 @@
+// Python language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the Python source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   parse_src  — parse_src(source, language) → Tree (for tests)
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param,
+//   insert_annotation
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func is_private(name) {
+  if len(name) == 0 {
+    return false
+  }
+  return name[0] == "_"
+}
+
+func visibility(name) {
+  return is_private(name) ? "private" : "public"
+}
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+// get_decorators returns a list of decorator names from a decorated_definition node.
+func get_decorators(decorated_node) {
+  decorators := []
+  count := int(decorated_node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := decorated_node.NamedChild(i)
+    if child.Type() == "decorator" {
+      expr := child.NamedChild(0)
+      if expr != nil {
+        if expr.Type() == "identifier" {
+          decorators = decorators.append(node_text(expr))
+        } else if expr.Type() == "call" {
+          fn := node_child(expr, "function")
+          if fn != nil {
+            decorators = decorators.append(node_text(fn))
+          }
+        } else if expr.Type() == "attribute" {
+          decorators = decorators.append(node_text(expr))
+        }
+      }
+    }
+  }
+  return decorators
+}
+
+// insert_decorators_as_annotations inserts decorators as annotations for a symbol.
+func insert_decorators_as_annotations(sym_id, decorated_node) {
+  count := int(decorated_node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := decorated_node.NamedChild(i)
+    if child.Type() == "decorator" {
+      expr := child.NamedChild(0)
+      if expr != nil {
+        dec_name := ""
+        dec_args := ""
+        if expr.Type() == "identifier" {
+          dec_name = node_text(expr)
+        } else if expr.Type() == "call" {
+          fn := node_child(expr, "function")
+          if fn != nil {
+            dec_name = node_text(fn)
+          }
+          args_node := node_child(expr, "arguments")
+          if args_node != nil {
+            dec_args = node_text(args_node)
+          }
+        } else if expr.Type() == "attribute" {
+          dec_name = node_text(expr)
+        }
+        if dec_name != "" {
+          insert_annotation({
+            target_symbol_id: sym_id,
+            name: dec_name,
+            arguments: dec_args,
+            file_id: file_id,
+            line: start_line(child),
+            col: start_col(child),
+          })
+        }
+      }
+    }
+  }
+}
+
+// determine_method_kind returns the method kind based on decorators.
+func determine_method_kind(decorators) {
+  for _, d := range decorators {
+    if d == "staticmethod" {
+      return "static_method"
+    }
+    if d == "classmethod" {
+      return "class_method"
+    }
+    if d == "property" {
+      return "property"
+    }
+  }
+  return "method"
+}
+
+// extract_params extracts function parameters.
+func extract_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    param_type := param.Type()
+
+    if param_type == "identifier" {
+      param_name := node_text(param)
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: param_name == "self" || param_name == "cls",
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "typed_parameter" {
+      p_name_node := param.NamedChild(0)
+      p_type_node := node_child(param, "type")
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      type_expr := ""
+      if p_type_node != nil {
+        type_expr = node_text(p_type_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: type_expr,
+        is_receiver: param_name == "self" || param_name == "cls",
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "default_parameter" {
+      p_name_node := node_child(param, "name")
+      p_val_node := node_child(param, "value")
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      default_expr := ""
+      if p_val_node != nil {
+        default_expr = node_text(p_val_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+        has_default: true,
+        default_expr: default_expr,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "typed_default_parameter" {
+      p_name_node := node_child(param, "name")
+      p_type_node := node_child(param, "type")
+      p_val_node := node_child(param, "value")
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      type_expr := ""
+      if p_type_node != nil {
+        type_expr = node_text(p_type_node)
+      }
+      default_expr := ""
+      if p_val_node != nil {
+        default_expr = node_text(p_val_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: type_expr,
+        is_receiver: false,
+        is_return: false,
+        has_default: true,
+        default_expr: default_expr,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "list_splat_pattern" {
+      p_name_node := param.NamedChild(0)
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: "*" + param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "dictionary_splat_pattern" {
+      p_name_node := param.NamedChild(0)
+      param_name := ""
+      if p_name_node != nil {
+        param_name = node_text(p_name_node)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: "**" + param_name,
+        ordinal: ordinal,
+        type_expr: "",
+        is_receiver: false,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    }
+  }
+}
+
+// extract_return_type extracts the return type annotation from a function.
+func extract_return_type(sym_id, func_node) {
+  ret_type := node_child(func_node, "return_type")
+  if ret_type != nil {
+    insert_function_param({
+      symbol_id: sym_id,
+      name: "",
+      ordinal: 0,
+      type_expr: node_text(ret_type),
+      is_receiver: false,
+      is_return: true,
+    })
+  }
+}
+
+// extract_definition is the single recursive extraction function.
+// It handles function_definition, class_definition, and decorated_definition.
+// parent_sym_id: the parent class symbol ID (nil for top-level).
+// decorators: list of decorator names (empty for undecorated).
+// decorated_node: the decorated_definition node wrapping this def (nil if none).
+func extract_definition(node, parent_sym_id, decorators, decorated_node) {
+  node_type := node.Type()
+
+  if node_type == "function_definition" {
+    name_node := node_child(node, "name")
+    if name_node == nil {
+      return nil
+    }
+    name := node_text(name_node)
+
+    kind := "function"
+    if parent_sym_id != nil {
+      kind = determine_method_kind(decorators)
+    }
+
+    span_node := node
+    if decorated_node != nil {
+      span_node = decorated_node
+    }
+
+    sym_map := {
+      file_id: file_id,
+      name: name,
+      kind: kind,
+      visibility: visibility(name),
+      start_line: start_line(span_node),
+      start_col: start_col(span_node),
+      end_line: end_line(span_node),
+      end_col: end_col(span_node),
+    }
+    if parent_sym_id != nil {
+      sym_map["parent_symbol_id"] = parent_sym_id
+    }
+
+    sym_id := insert_symbol(sym_map)
+
+    if decorated_node != nil {
+      insert_decorators_as_annotations(sym_id, decorated_node)
+    }
+
+    params_node := node_child(node, "parameters")
+    if params_node != nil {
+      extract_params(sym_id, params_node)
+    }
+
+    extract_return_type(sym_id, node)
+
+    // Walk function body for nested functions/classes
+    fn_body := node_child(node, "body")
+    if fn_body != nil {
+      fn_body_count := int(fn_body.NamedChildCount())
+      for bi := 0; bi < fn_body_count; bi++ {
+        body_child := fn_body.NamedChild(bi)
+        body_child_type := body_child.Type()
+        if body_child_type == "function_definition" || body_child_type == "class_definition" || body_child_type == "decorated_definition" {
+          extract_definition(body_child, nil, [], nil)
+        }
+      }
+    }
+
+    return sym_id
+
+  } else if node_type == "class_definition" {
+    name_node := node_child(node, "name")
+    if name_node == nil {
+      return nil
+    }
+    name := node_text(name_node)
+
+    span_node := node
+    if decorated_node != nil {
+      span_node = decorated_node
+    }
+
+    sym_map := {
+      file_id: file_id,
+      name: name,
+      kind: "class",
+      visibility: visibility(name),
+      start_line: start_line(span_node),
+      start_col: start_col(span_node),
+      end_line: end_line(span_node),
+      end_col: end_col(span_node),
+    }
+    if parent_sym_id != nil {
+      sym_map["parent_symbol_id"] = parent_sym_id
+    }
+    class_sym_id := insert_symbol(sym_map)
+
+    if decorated_node != nil {
+      insert_decorators_as_annotations(class_sym_id, decorated_node)
+    }
+
+    // Base classes
+    superclasses := node_child(node, "superclasses")
+    if superclasses != nil {
+      sc_count := int(superclasses.NamedChildCount())
+      for j := 0; j < sc_count; j++ {
+        base := superclasses.NamedChild(j)
+        base_name := node_text(base)
+        insert_type_member({
+          symbol_id: class_sym_id,
+          name: base_name,
+          kind: "base_class",
+          type_expr: base_name,
+          visibility: "public",
+        })
+      }
+    }
+
+    // Type parameters (Python 3.12)
+    tp_node := node_child(node, "type_parameters")
+    if tp_node != nil {
+      tp_count := int(tp_node.NamedChildCount())
+      for j := 0; j < tp_count; j++ {
+        tp := tp_node.NamedChild(j)
+        if tp.Type() == "type" {
+          tp_name_node := tp.NamedChild(0)
+          if tp_name_node != nil {
+            insert_type_param({
+              symbol_id: class_sym_id,
+              name: node_text(tp_name_node),
+              ordinal: j,
+              param_kind: "type",
+              constraints: "",
+            })
+          }
+        }
+      }
+    }
+
+    // Process class body — recurse into children
+    body_node := node_child(node, "body")
+    if body_node != nil {
+      body_count := int(body_node.NamedChildCount())
+      for k := 0; k < body_count; k++ {
+        child := body_node.NamedChild(k)
+        child_type := child.Type()
+
+        if child_type == "function_definition" {
+          extract_definition(child, class_sym_id, [], nil)
+        } else if child_type == "decorated_definition" {
+          child_decorators := get_decorators(child)
+          def_node := node_child(child, "definition")
+          if def_node != nil {
+            extract_definition(def_node, class_sym_id, child_decorators, child)
+          }
+        } else if child_type == "class_definition" {
+          extract_definition(child, class_sym_id, [], nil)
+        } else if child_type == "expression_statement" {
+          expr := child.NamedChild(0)
+          if expr != nil && expr.Type() == "assignment" {
+            left := node_child(expr, "left")
+            if left != nil && left.Type() == "identifier" {
+              var_name := node_text(left)
+              type_expr := ""
+              ann_node := node_child(expr, "type")
+              if ann_node != nil {
+                type_expr = node_text(ann_node)
+              }
+              insert_type_member({
+                symbol_id: class_sym_id,
+                name: var_name,
+                kind: "field",
+                type_expr: type_expr,
+                visibility: visibility(var_name),
+              })
+            }
+          }
+        }
+      }
+    }
+
+    return class_sym_id
+
+  } else if node_type == "decorated_definition" {
+    dec_decorators := get_decorators(node)
+    def_node := node_child(node, "definition")
+    if def_node != nil {
+      return extract_definition(def_node, parent_sym_id, dec_decorators, node)
+    }
+    return nil
+  }
+
+  return nil
+}
+
+// extract_block_scopes recursively extracts block scopes from control flow.
+func extract_block_scopes(node, parent_scope_id) {
+  block_types := ["if_statement", "for_statement", "while_statement",
+                   "try_statement", "with_statement", "match_statement"]
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    child_type := child.Type()
+
+    found := false
+    for _, bt := range block_types {
+      if child_type == bt {
+        found = true
+      }
+    }
+
+    if found {
+      block_scope_id := insert_scope({
+        file_id: file_id,
+        kind: "block",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+      })
+      extract_block_scopes(child, block_scope_id)
+    } else {
+      extract_block_scopes(child, parent_scope_id)
+    }
+  }
+}
+
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "python")
+root := tree.RootNode()
+
+// --- Imports ---
+// import os, import sys
+import_matches := query("(import_statement (dotted_name) @name) @stmt", root)
+for _, m := range import_matches {
+  name_node := m["name"]
+  source := node_text(name_node)
+  parts := strings.split(source, ".")
+  imported_name := parts[len(parts)-1]
+  insert_import({
+    file_id: file_id,
+    source: source,
+    imported_name: imported_name,
+    kind: "module",
+    scope: "file",
+  })
+}
+
+// from os import path
+// from os import path as p
+from_import_matches := query("(import_from_statement module_name: (dotted_name) @module) @stmt", root)
+for _, m := range from_import_matches {
+  mod_node := m["module"]
+  stmt_node := m["stmt"]
+  source := node_text(mod_node)
+
+  stmt_count := int(stmt_node.NamedChildCount())
+  for j := 0; j < stmt_count; j++ {
+    child := stmt_node.NamedChild(j)
+    if child.Type() == "dotted_name" && node_text(child) == source {
+      // Module name, skip
+    } else if child.Type() == "dotted_name" {
+      imported := node_text(child)
+      insert_import({
+        file_id: file_id,
+        source: source,
+        imported_name: imported,
+        kind: "name",
+        scope: "file",
+      })
+    } else if child.Type() == "aliased_import" {
+      name_n := node_child(child, "name")
+      alias_n := node_child(child, "alias")
+      if name_n != nil {
+        imported := node_text(name_n)
+        imp := {
+          file_id: file_id,
+          source: source,
+          imported_name: imported,
+          kind: "name",
+          scope: "file",
+        }
+        if alias_n != nil {
+          imp["local_alias"] = node_text(alias_n)
+        }
+        insert_import(imp)
+      }
+    }
+  }
+}
+
+// from os import * (wildcard import)
+wildcard_matches := query("(import_from_statement module_name: (dotted_name) @module (wildcard_import) @star) @stmt", root)
+for _, m := range wildcard_matches {
+  mod_node := m["module"]
+  insert_import({
+    file_id: file_id,
+    source: node_text(mod_node),
+    imported_name: "*",
+    kind: "wildcard",
+    scope: "file",
+  })
+}
+
+
+// --- Top-level definitions ---
+root_count := int(root.NamedChildCount())
+for i := 0; i < root_count; i++ {
+  child := root.NamedChild(i)
+  child_type := child.Type()
+
+  if child_type == "function_definition" || child_type == "class_definition" || child_type == "decorated_definition" {
+    extract_definition(child, nil, [], nil)
+  } else if child_type == "expression_statement" {
+    expr := child.NamedChild(0)
+    if expr != nil && expr.Type() == "assignment" {
+      left := node_child(expr, "left")
+      if left != nil && left.Type() == "identifier" {
+        var_name := node_text(left)
+        insert_symbol({
+          file_id: file_id,
+          name: var_name,
+          kind: "variable",
+          visibility: visibility(var_name),
+          start_line: start_line(child),
+          start_col: start_col(child),
+          end_line: end_line(child),
+          end_col: end_col(child),
+        })
+      }
+    }
+  }
+}
+
+
+// --- Scope tree ---
+module_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "module",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Function scopes
+fn_scope_matches := query("(function_definition) @fn", root)
+for _, m := range fn_scope_matches {
+  fn_node := m["fn"]
+  fn_nn := node_child(fn_node, "name")
+  fn_sym_id := nil
+  if fn_nn != nil {
+    fn_sym_id = find_symbol_id(node_text(fn_nn))
+  }
+  scope_map := {
+    file_id: file_id,
+    kind: "function",
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+    parent_scope_id: module_scope_id,
+  }
+  if fn_sym_id != nil {
+    scope_map["symbol_id"] = fn_sym_id
+  }
+  fn_scope_id := insert_scope(scope_map)
+  body_node := node_child(fn_node, "body")
+  if body_node != nil {
+    extract_block_scopes(body_node, fn_scope_id)
+  }
+}
+
+// Class scopes
+class_scope_matches := query("(class_definition) @cls", root)
+for _, m := range class_scope_matches {
+  cls_node := m["cls"]
+  cls_nn := node_child(cls_node, "name")
+  cls_sym_id := nil
+  if cls_nn != nil {
+    cls_sym_id = find_symbol_id(node_text(cls_nn))
+  }
+  scope_map := {
+    file_id: file_id,
+    kind: "class",
+    start_line: start_line(cls_node),
+    start_col: start_col(cls_node),
+    end_line: end_line(cls_node),
+    end_col: end_col(cls_node),
+    parent_scope_id: module_scope_id,
+  }
+  if cls_sym_id != nil {
+    scope_map["symbol_id"] = cls_sym_id
+  }
+  insert_scope(scope_map)
+}
+
+
+// --- References ---
+
+// Simple function calls: foo()
+call_matches := query("(call function: (identifier) @name) @call", root)
+for _, m := range call_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Attribute calls: obj.method()
+attr_call_matches := query("(call function: (attribute object: (_) @obj attribute: (identifier) @attr)) @call", root)
+for _, m := range attr_call_matches {
+  attr_node := m["attr"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(attr_node),
+    context: "call",
+    start_line: start_line(attr_node),
+    start_col: start_col(attr_node),
+    end_line: end_line(attr_node),
+    end_col: end_col(attr_node),
+  })
+}
+
+// Non-call attribute access: obj.attr (not a call)
+attr_access_matches := query("(attribute object: (_) @obj attribute: (identifier) @attr) @access", root)
+for _, m := range attr_access_matches {
+  access_node := m["access"]
+  parent := access_node.Parent()
+  if parent != nil && parent.Type() == "call" {
+    // Already handled above
+  } else {
+    attr_node := m["attr"]
+    insert_reference({
+      file_id: file_id,
+      name: node_text(attr_node),
+      context: "field_access",
+      start_line: start_line(attr_node),
+      start_col: start_col(attr_node),
+      end_line: end_line(attr_node),
+      end_col: end_col(attr_node),
+    })
+  }
+}
+
+// Type annotations (PEP 484): function parameters and return types
+type_ann_matches := query("(type (identifier) @type_id)", root)
+for _, m := range type_ann_matches {
+  tn := m["type_id"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(tn),
+    context: "type_annotation",
+    start_line: start_line(tn),
+    start_col: start_col(tn),
+    end_line: end_line(tn),
+    end_col: end_col(tn),
+  })
+}
+
+// Base class references in class inheritance
+base_class_matches := query("(class_definition superclasses: (argument_list (identifier) @base))", root)
+for _, m := range base_class_matches {
+  base_node := m["base"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(base_node),
+    context: "type_annotation",
+    start_line: start_line(base_node),
+    start_col: start_col(base_node),
+    end_line: end_line(base_node),
+    end_col: end_col(base_node),
+  })
+}

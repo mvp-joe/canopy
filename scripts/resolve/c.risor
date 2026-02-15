@@ -1,0 +1,392 @@
+// C language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+import strings
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_scope_for_ref returns the innermost scope that contains the given reference.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a reference's scope upward
+// to find the enclosing function/method scope and returns its symbol_id.
+func find_caller_symbol_id(ref_scope_id) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(ref_scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" {
+            return sym_id
+          }
+        }
+        // Fallback: find function/method symbol at this scope's position
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'function' OR kind = 'method') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// basename extracts the filename from a path (last segment after / or \).
+func basename(path) {
+  parts := strings.split(path, "/")
+  result := parts[len(parts) - 1]
+  // Also handle backslash for Windows-style paths
+  parts2 := strings.split(result, "\\")
+  return parts2[len(parts2) - 1]
+}
+
+// ========== Main resolution pipeline ==========
+
+c_files := files_by_language("c")
+if len(c_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+file_symbols_map := {}
+file_scopes_map := {}
+file_imports_map := {}
+// Map from file basename → list of file_ids (for include resolution)
+file_basename_map := {}
+
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+
+  file_symbols_map[fid_str] = symbols_by_file(fid)
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+
+  // Index by basename for include resolution
+  path := f["path"]
+  bn := basename(path)
+  existing := []
+  if bn in file_basename_map {
+    existing = file_basename_map[bn]
+  }
+  existing = existing.append(fid)
+  file_basename_map[bn] = existing
+}
+
+// Track which references have been resolved (ref_id_str → true)
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            ref_id_str := string(ref_id)
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          ref_id_str := string(ref_id)
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Include-based cross-file resolution ---
+// For unresolved references, check if the file includes headers that
+// match basenames of other C files in the store. Resolve against symbols
+// in those included files.
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  imports := file_imports_map[fid_str]
+
+  // Collect file_ids of files included by this file
+  included_file_ids := []
+  for _, imp := range imports {
+    if imp["kind"] != "header" {
+      continue
+    }
+    source := imp["source"]
+    inc_basename := basename(source)
+    if inc_basename in file_basename_map {
+      for _, inc_fid := range file_basename_map[inc_basename] {
+        if inc_fid != fid {
+          included_file_ids = included_file_ids.append(inc_fid)
+        }
+      }
+    }
+  }
+
+  if len(included_file_ids) == 0 {
+    continue
+  }
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    found := false
+    for _, inc_fid := range included_file_ids {
+      inc_fid_str := string(inc_fid)
+      inc_syms := file_symbols_map[inc_fid_str]
+      for _, sym := range inc_syms {
+        if sym["name"] == ref_name {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 1.0,
+            resolution_kind: "import",
+          })
+          resolved_set[ref_id_str] = true
+          found = true
+          break
+        }
+      }
+      if found {
+        break
+      }
+    }
+  }
+}
+
+// --- (c) Struct field access resolution ---
+// For field_access references, try matching against struct fields (type_members).
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_ctx := ref["context"]
+    ref_name := ref["name"]
+
+    if ref_ctx == "field_access" {
+      // Search all structs in all C files for a matching field
+      for _, other_f := range c_files {
+        other_fid := other_f["id"]
+        other_fid_str := string(other_fid)
+        other_syms := file_symbols_map[other_fid_str]
+        for _, sym := range other_syms {
+          if sym["kind"] == "struct" {
+            members := type_members(sym["id"])
+            for _, mem := range members {
+              if mem["name"] == ref_name {
+                insert_resolved_reference({
+                  reference_id: ref_id,
+                  target_symbol_id: sym["id"],
+                  confidence: 0.7,
+                  resolution_kind: "direct",
+                })
+                resolved_set[ref_id_str] = true
+                break
+              }
+            }
+            if ref_id_str in resolved_set {
+              break
+            }
+          }
+        }
+        if ref_id_str in resolved_set {
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (d) Cross-file resolution (fallback for remaining unresolved) ---
+// For references still unresolved, try matching against symbols in all C files.
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    for _, other_f := range c_files {
+      other_fid := other_f["id"]
+      if other_fid == fid {
+        continue
+      }
+      other_fid_str := string(other_fid)
+      other_syms := file_symbols_map[other_fid_str]
+      for _, sym := range other_syms {
+        if sym["name"] == ref_name {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.8,
+            resolution_kind: "direct",
+          })
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+      if ref_id_str in resolved_set {
+        break
+      }
+    }
+  }
+}
+
+// --- (e) Call graph edge creation ---
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}

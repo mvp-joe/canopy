@@ -1,0 +1,614 @@
+// Java language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_scope_for_ref returns the innermost scope containing a reference position.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a scope upward to find
+// the enclosing function/method/constructor scope and returns its symbol_id.
+func find_caller_symbol_id(scope_id) {
+  if scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        // Verify this symbol is actually a function/method/constructor
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" || sym_kind == "constructor" {
+            return sym_id
+          }
+        }
+        // Fallback: find a method/constructor symbol at this scope's position
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'method' OR kind = 'constructor') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// find_package_name returns the package name for a file.
+func find_package_name(file_symbols) {
+  for _, sym := range file_symbols {
+    if sym["kind"] == "package" {
+      return sym["name"]
+    }
+  }
+  return ""
+}
+
+// last_segment returns the last dot-separated segment of a string.
+// e.g. "com.example.Foo" -> "Foo"
+func last_segment(s) {
+  idx := -1
+  for i := 0; i < len(s); i++ {
+    if s[i] == "." {
+      idx = i
+    }
+  }
+  if idx >= 0 && idx < len(s) - 1 {
+    return s[idx + 1:]
+  }
+  return s
+}
+
+// ========== Main resolution pipeline ==========
+
+java_files := files_by_language("java")
+if len(java_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+file_symbols_map := {}
+file_package_map := {}
+package_files_map := {}
+file_scopes_map := {}
+file_imports_map := {}
+
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+
+  syms := symbols_by_file(fid)
+  file_symbols_map[fid_str] = syms
+
+  pkg_name := find_package_name(syms)
+  file_package_map[fid_str] = pkg_name
+
+  if pkg_name != "" {
+    existing := []
+    if pkg_name in package_files_map {
+      existing = package_files_map[pkg_name]
+    }
+    existing = existing.append(fid)
+    package_files_map[pkg_name] = existing
+  }
+
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+}
+
+// --- Build import mappings per file ---
+// file_id_str → { simple_name → import_record }
+file_import_name_map := {}
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  imports := file_imports_map[fid_str]
+  name_map := {}
+  for _, imp := range imports {
+    imported_name := ""
+    if "imported_name" in imp {
+      imported_name = imp["imported_name"]
+    }
+    if imported_name != "" && imported_name != "*" {
+      name_map[imported_name] = imp
+    }
+  }
+  file_import_name_map[fid_str] = name_map
+}
+
+// Track which references have been resolved (ref_id → true)
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+// Resolve references to symbols in the same file using scope chain.
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          if sym["kind"] == "package" {
+            continue
+          }
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            ref_id_str := string(ref_id)
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name && sym["kind"] != "package" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          ref_id_str := string(ref_id)
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Cross-file same-package resolution ---
+// Java files in the same package can see each other's types.
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  pkg_name := file_package_map[fid_str]
+  if pkg_name == "" {
+    continue
+  }
+
+  refs := references_by_file(fid)
+  pkg_file_ids := []
+  if pkg_name in package_files_map {
+    pkg_file_ids = package_files_map[pkg_name]
+  }
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    found := false
+    for _, other_fid := range pkg_file_ids {
+      if other_fid == fid {
+        continue
+      }
+      other_fid_str := string(other_fid)
+      other_syms := file_symbols_map[other_fid_str]
+      for _, sym := range other_syms {
+        if sym["name"] == ref_name && sym["kind"] != "package" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 1.0,
+            resolution_kind: "direct",
+          })
+          resolved_set[ref_id_str] = true
+          found = true
+          break
+        }
+      }
+      if found {
+        break
+      }
+    }
+  }
+}
+
+// --- (c) Cross-package import resolution ---
+// For unresolved references, check if the name matches an import's imported_name,
+// then find the corresponding symbol in the imported package's files.
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  name_map := file_import_name_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    if !(ref_name in name_map) {
+      continue
+    }
+
+    imp := name_map[ref_name]
+    imp_source := imp["source"]
+
+    // The import source is like "com.example.Foo". The package is everything
+    // up to the last dot: "com.example". Find files declaring that package
+    // which contain a symbol with this name.
+    pkg_part := imp_source
+    dot_idx := -1
+    for i := 0; i < len(imp_source); i++ {
+      if imp_source[i] == "." {
+        dot_idx = i
+      }
+    }
+    if dot_idx > 0 {
+      pkg_part = imp_source[:dot_idx]
+    }
+
+    // Find files with matching package that have a symbol with the imported name
+    imported_files := db_query(
+      "SELECT DISTINCT f.id FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.kind = 'package' AND s.name = ? AND f.language = 'java'",
+      pkg_part,
+    )
+    for _, pf := range imported_files {
+      pf_id := pf["id"]
+      pf_syms := symbols_by_file(pf_id)
+      for _, sym := range pf_syms {
+        if sym["name"] == ref_name && sym["kind"] != "package" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 1.0,
+            resolution_kind: "import",
+          })
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+      if ref_id_str in resolved_set {
+        break
+      }
+    }
+  }
+}
+
+// --- (d) Method resolution (qualified calls) ---
+// For "call" references that weren't resolved, try matching against methods
+// of classes in the same package or imported classes.
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  pkg_name := file_package_map[fid_str]
+  refs := references_by_file(fid)
+
+  pkg_file_ids := []
+  if pkg_name in package_files_map {
+    pkg_file_ids = package_files_map[pkg_name]
+  }
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_ctx := ref["context"]
+    ref_name := ref["name"]
+
+    if ref_ctx == "call" {
+      // Look for methods/constructors with this name in the same package
+      for _, pkg_fid := range pkg_file_ids {
+        pkg_fid_str := string(pkg_fid)
+        pkg_syms := file_symbols_map[pkg_fid_str]
+        for _, sym := range pkg_syms {
+          if sym["name"] == ref_name && (sym["kind"] == "method" || sym["kind"] == "constructor") {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 0.8,
+              resolution_kind: "direct",
+            })
+            resolved_set[ref_id_str] = true
+            break
+          }
+        }
+        if ref_id_str in resolved_set {
+          break
+        }
+      }
+    }
+
+    if ref_ctx == "field_access" {
+      // For field access, look for matching members (fields) on classes in the package
+      if !(ref_id_str in resolved_set) {
+        for _, pkg_fid := range pkg_file_ids {
+          pkg_fid_str := string(pkg_fid)
+          pkg_syms := file_symbols_map[pkg_fid_str]
+          for _, sym := range pkg_syms {
+            if sym["kind"] == "class" || sym["kind"] == "interface" {
+              members := type_members(sym["id"])
+              for _, mem := range members {
+                if mem["name"] == ref_name {
+                  insert_resolved_reference({
+                    reference_id: ref_id,
+                    target_symbol_id: sym["id"],
+                    confidence: 0.7,
+                    resolution_kind: "direct",
+                  })
+                  resolved_set[ref_id_str] = true
+                  break
+                }
+              }
+              if ref_id_str in resolved_set {
+                break
+              }
+            }
+          }
+          if ref_id_str in resolved_set {
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- (e) Class hierarchy: explicit extends/implements ---
+// Java uses explicit class hierarchy. The extraction script creates type_annotation
+// references for superclasses and interfaces. We detect extends/implements by
+// querying the extraction data for superclass/interface relationships.
+//
+// For each class, check if it has a superclass or interfaces by looking at the
+// extraction metadata. The extraction script stores this in the symbols table
+// via parent references and in type_members.
+//
+// Strategy: For each class symbol, query the DB for the raw extends/implements
+// info stored during extraction.
+all_classes := symbols_by_kind("class")
+all_interfaces := symbols_by_kind("interface")
+
+// Build a name -> symbol map for quick lookup
+name_to_symbols := {}
+for _, sym := range all_classes {
+  name := sym["name"]
+  existing := []
+  if name in name_to_symbols {
+    existing = name_to_symbols[name]
+  }
+  existing = existing.append(sym)
+  name_to_symbols[name] = existing
+}
+for _, sym := range all_interfaces {
+  name := sym["name"]
+  existing := []
+  if name in name_to_symbols {
+    existing = name_to_symbols[name]
+  }
+  existing = existing.append(sym)
+  name_to_symbols[name] = existing
+}
+
+// For each class, find type_annotation references on the same line range as
+// the class declaration. These are the extends/implements references.
+// We use a heuristic: type_annotation refs within the class header (first few lines)
+// that match known class/interface names indicate inheritance.
+for _, cls := range all_classes {
+  cls_id := cls["id"]
+  cls_fid := cls["file_id"]
+  cls_fid_str := string(cls_fid)
+  cls_start := cls["start_line"]
+
+  // Get references in this file that are type_annotation on/near the class declaration line
+  refs := references_by_file(cls_fid)
+  for _, ref := range refs {
+    if ref["context"] != "type_annotation" {
+      continue
+    }
+    // Only consider refs on the class declaration header (first line or two)
+    ref_line := ref["start_line"]
+    if ref_line < cls_start || ref_line > cls_start + 2 {
+      continue
+    }
+    ref_name := ref["name"]
+
+    // Check if this name matches any known interface
+    if ref_name in name_to_symbols {
+      targets := name_to_symbols[ref_name]
+      for _, target := range targets {
+        if target["id"] == cls_id {
+          continue
+        }
+        target_kind := target["kind"]
+        if target_kind == "interface" {
+          impl_map := {
+            type_symbol_id: cls_id,
+            interface_symbol_id: target["id"],
+            kind: "explicit",
+          }
+          if cls_fid != nil {
+            impl_map["file_id"] = cls_fid
+          }
+          insert_implementation(impl_map)
+        } else if target_kind == "class" {
+          // extends relationship — also stored as implementation with kind "extends"
+          impl_map := {
+            type_symbol_id: cls_id,
+            interface_symbol_id: target["id"],
+            kind: "extends",
+          }
+          if cls_fid != nil {
+            impl_map["file_id"] = cls_fid
+          }
+          insert_implementation(impl_map)
+        }
+      }
+    }
+  }
+}
+
+// --- (f) Call graph edge creation ---
+// For each resolved reference with context="call", create a call_graph edge.
+for _, f := range java_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}
+
+// --- (g) Extension bindings for class methods ---
+// In Java, methods declared inside a class are extension bindings on that class.
+// Unlike Go, the parent_symbol_id is directly set during extraction.
+all_methods := symbols_by_kind("method")
+for _, meth := range all_methods {
+  parent_id := nil
+  if "parent_symbol_id" in meth {
+    parent_id = meth["parent_symbol_id"]
+  }
+  if parent_id == nil {
+    continue
+  }
+
+  // Only process Java methods (check that the file is a Java file)
+  meth_fid := meth["file_id"]
+  meth_fid_str := string(meth_fid)
+  is_java := false
+  for _, f := range java_files {
+    if f["id"] == meth_fid {
+      is_java = true
+      break
+    }
+  }
+  if !is_java {
+    continue
+  }
+
+  // Get the parent class name
+  parent_rows := db_query("SELECT name FROM symbols WHERE id = ?", parent_id)
+  if len(parent_rows) == 0 {
+    continue
+  }
+  parent_name := parent_rows[0]["name"]
+
+  insert_extension_binding({
+    member_symbol_id: meth["id"],
+    extended_type_expr: parent_name,
+    extended_type_symbol_id: parent_id,
+    kind: "method",
+  })
+}

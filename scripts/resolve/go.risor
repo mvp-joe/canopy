@@ -1,0 +1,623 @@
+// Go language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_containing_scope returns the scope that contains the given (line, col) position
+// from a list of scopes for a file.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    // Check if ref is inside this scope
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      // Prefer the innermost (smallest) scope
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// symbols_in_scope returns all symbols declared in the given scope (by checking
+// if the symbol's start position falls within the scope's range).
+func symbols_in_scope(scope, file_symbols) {
+  result := []
+  sl := scope["start_line"]
+  el := scope["end_line"]
+  for _, sym := range file_symbols {
+    sym_line := sym["start_line"]
+    if sym_line >= sl && sym_line <= el {
+      result = result.append(sym)
+    }
+  }
+  return result
+}
+
+// find_package_name returns the package name for a file by looking for the
+// "package" symbol.
+func find_package_name(file_symbols) {
+  for _, sym := range file_symbols {
+    if sym["kind"] == "package" {
+      return sym["name"]
+    }
+  }
+  return ""
+}
+
+// find_caller_symbol_id walks the scope chain from a reference's scope upward
+// to find the enclosing function/method scope and returns its symbol_id.
+// Verifies the symbol is actually a function or method (not a name collision
+// with a package symbol).
+func find_caller_symbol_id(ref_scope_id) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(ref_scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        // Verify this symbol is actually a function/method, not a package
+        // (can happen when a function has the same name as the package, e.g. "main").
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" {
+            return sym_id
+          }
+        }
+        // If the scope's symbol_id doesn't point to a function, try to find
+        // a function/method symbol that matches this scope's position.
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'function' OR kind = 'method') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// strip_pointer removes leading * from a type expression.
+func strip_pointer(type_expr) {
+  result := type_expr
+  for len(result) > 0 && result[0] == "*" {
+    result = result[1:]
+  }
+  return result
+}
+
+// ========== Main resolution pipeline ==========
+
+go_files := files_by_language("go")
+if len(go_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+// Map from file_id → list of symbols
+file_symbols_map := {}
+// Map from file_id → package name
+file_package_map := {}
+// Map from package_name → list of file_ids
+package_files_map := {}
+// Map from file_id → list of scopes
+file_scopes_map := {}
+// Map from file_id → list of imports
+file_imports_map := {}
+
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+
+  syms := symbols_by_file(fid)
+  file_symbols_map[fid_str] = syms
+
+  pkg_name := find_package_name(syms)
+  file_package_map[fid_str] = pkg_name
+
+  // Group by package
+  if pkg_name != "" {
+    existing := []
+    if pkg_name in package_files_map {
+      existing = package_files_map[pkg_name]
+    }
+    existing = existing.append(fid)
+    package_files_map[pkg_name] = existing
+  }
+
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+}
+
+// --- Build import alias → source mapping per file ---
+// file_id_str → { alias → import_map }
+file_import_alias_map := {}
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  imports := file_imports_map[fid_str]
+  alias_map := {}
+  for _, imp := range imports {
+    alias := ""
+    if "local_alias" in imp {
+      alias = imp["local_alias"]
+    }
+    if alias == "" || alias == "_" {
+      // Use imported_name as the alias (default Go behavior)
+      if "imported_name" in imp {
+        alias = imp["imported_name"]
+      }
+    }
+    if alias != "" && alias != "." && alias != "_" {
+      alias_map[alias] = imp
+    }
+  }
+  file_import_alias_map[fid_str] = alias_map
+}
+
+// Track which references have been resolved (ref_id → true)
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    // If the reference has a scope_id, walk the scope chain
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        // Check if any symbol in this scope matches the reference name
+        sc_sym_id := nil
+        if "symbol_id" in sc {
+          sc_sym_id = sc["symbol_id"]
+        }
+
+        // Check symbols at this scope's level
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          // Symbol must be declared in or associated with this scope
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            ref_id_str := string(ref_id)
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name && sym["kind"] != "package" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          ref_id_str := string(ref_id)
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Cross-file same-package resolution ---
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  pkg_name := file_package_map[fid_str]
+  if pkg_name == "" {
+    continue
+  }
+
+  refs := references_by_file(fid)
+  pkg_file_ids := []
+  if pkg_name in package_files_map {
+    pkg_file_ids = package_files_map[pkg_name]
+  }
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    // Look in other files of the same package
+    found := false
+    for _, other_fid := range pkg_file_ids {
+      if other_fid == fid {
+        continue
+      }
+      other_fid_str := string(other_fid)
+      other_syms := file_symbols_map[other_fid_str]
+      for _, sym := range other_syms {
+        if sym["name"] == ref_name && sym["kind"] != "package" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 1.0,
+            resolution_kind: "direct",
+          })
+          resolved_set[ref_id_str] = true
+          found = true
+          break
+        }
+      }
+      if found {
+        break
+      }
+    }
+  }
+}
+
+// --- (c) Cross-package import resolution ---
+// For references matching an import alias, resolve as import reference.
+// For qualified references (fmt.Println pattern):
+//   - The operand "fmt" is a "call" context reference matching an import alias
+//   - The field "Println" is a "field_access" context reference
+// We need to find "field_access" refs that follow an import-matched operand.
+
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  alias_map := file_import_alias_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+    ref_ctx := ref["context"]
+
+    // Check if this reference name matches an import alias (the "fmt" in "fmt.Println")
+    if ref_name in alias_map {
+      // This ref is to the import itself — we don't resolve imports as symbols
+      // (there's no "fmt" symbol), but mark it so we don't try further
+      resolved_set[ref_id_str] = true
+      continue
+    }
+
+    // For field_access refs, check if there's a preceding import-alias reference
+    // on the same line. This handles "fmt.Println" where "Println" is field_access.
+    if ref_ctx == "field_access" {
+      // Try to find the import this field belongs to by looking at call refs
+      // on the same line that match an import alias
+      ref_line := ref["start_line"]
+      for _, other_ref := range refs {
+        other_name := other_ref["name"]
+        if other_name in alias_map && other_ref["start_line"] == ref_line {
+          // Found the import alias ref. Now look up symbols from the imported package.
+          imp := alias_map[other_name]
+          imp_source := imp["source"]
+          // Find files that declare this package (by matching the last segment
+          // of the import source against package names in our DB)
+          imported_pkg_files := db_query(
+            "SELECT DISTINCT f.id FROM files f JOIN symbols s ON s.file_id = f.id WHERE s.kind = 'package' AND s.name = ? AND f.language = 'go'",
+            other_name,
+          )
+          for _, pf := range imported_pkg_files {
+            pf_id := pf["id"]
+            pf_syms := symbols_by_file(pf_id)
+            for _, sym := range pf_syms {
+              if sym["name"] == ref_name && sym["visibility"] == "public" {
+                insert_resolved_reference({
+                  reference_id: ref_id,
+                  target_symbol_id: sym["id"],
+                  confidence: 1.0,
+                  resolution_kind: "import",
+                })
+                resolved_set[ref_id_str] = true
+                break
+              }
+            }
+            if ref_id_str in resolved_set {
+              break
+            }
+          }
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (d) Method resolution (receiver type matching) ---
+// For field_access references that weren't resolved above (not import-qualified),
+// try to match against methods of types in the same package.
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  pkg_name := file_package_map[fid_str]
+  refs := references_by_file(fid)
+
+  pkg_file_ids := []
+  if pkg_name in package_files_map {
+    pkg_file_ids = package_files_map[pkg_name]
+  }
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_ctx := ref["context"]
+    ref_name := ref["name"]
+
+    if ref_ctx == "field_access" {
+      // Look for methods with this name in the same package
+      for _, pkg_fid := range pkg_file_ids {
+        pkg_fid_str := string(pkg_fid)
+        pkg_syms := file_symbols_map[pkg_fid_str]
+        for _, sym := range pkg_syms {
+          if sym["name"] == ref_name && sym["kind"] == "method" {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 0.8,
+              resolution_kind: "direct",
+            })
+            resolved_set[ref_id_str] = true
+            break
+          }
+        }
+        if ref_id_str in resolved_set {
+          break
+        }
+      }
+
+      // Also check struct fields
+      if !(ref_id_str in resolved_set) {
+        for _, pkg_fid := range pkg_file_ids {
+          pkg_fid_str := string(pkg_fid)
+          pkg_syms := file_symbols_map[pkg_fid_str]
+          for _, sym := range pkg_syms {
+            if sym["kind"] == "struct" || sym["kind"] == "interface" {
+              members := type_members(sym["id"])
+              for _, mem := range members {
+                if mem["name"] == ref_name {
+                  // Resolve to the parent type symbol since type_members don't have
+                  // their own symbol ID in the symbols table
+                  insert_resolved_reference({
+                    reference_id: ref_id,
+                    target_symbol_id: sym["id"],
+                    confidence: 0.7,
+                    resolution_kind: "direct",
+                  })
+                  resolved_set[ref_id_str] = true
+                  break
+                }
+              }
+              if ref_id_str in resolved_set {
+                break
+              }
+            }
+          }
+          if ref_id_str in resolved_set {
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- (e) Interface matching (structural, implicit) ---
+// For each interface, check if any struct in the same package satisfies it.
+all_interfaces := symbols_by_kind("interface")
+all_structs := symbols_by_kind("struct")
+
+for _, iface := range all_interfaces {
+  iface_id := iface["id"]
+  iface_methods := type_members(iface_id)
+
+  // Collect interface method names (only "method" kind members, not "embedded")
+  iface_method_names := []
+  for _, m := range iface_methods {
+    if m["kind"] == "method" {
+      iface_method_names = iface_method_names.append(m["name"])
+    }
+  }
+  if len(iface_method_names) == 0 {
+    continue
+  }
+
+  for _, st := range all_structs {
+    st_id := st["id"]
+
+    // Get all methods on this struct (methods with parent_symbol_id == st_id)
+    st_methods := db_query(
+      "SELECT name FROM symbols WHERE parent_symbol_id = ? AND kind = 'method'",
+      st_id,
+    )
+    st_method_names := {}
+    for _, m := range st_methods {
+      st_method_names[m["name"]] = true
+    }
+
+    // Check if struct has all interface methods
+    satisfies := true
+    for _, method_name := range iface_method_names {
+      if !(method_name in st_method_names) {
+        satisfies = false
+        break
+      }
+    }
+
+    if satisfies {
+      // Determine file_id for the implementation record
+      impl_file_id := nil
+      if "file_id" in st {
+        impl_file_id = st["file_id"]
+      }
+
+      impl_map := {
+        type_symbol_id: st_id,
+        interface_symbol_id: iface_id,
+        kind: "implicit",
+      }
+      if impl_file_id != nil {
+        impl_map["file_id"] = impl_file_id
+      }
+      insert_implementation(impl_map)
+    }
+  }
+}
+
+// --- (f) Call graph edge creation ---
+// For each resolved reference with context="call", create a call_graph edge.
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      edge_map := {
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      }
+      insert_call_edge(edge_map)
+    }
+  }
+}
+
+// --- (g) Extension binding for methods on types ---
+// In Go, methods defined on types via receivers are extension bindings.
+all_methods := symbols_by_kind("method")
+for _, meth := range all_methods {
+  parent_id := nil
+  if "parent_symbol_id" in meth {
+    parent_id = meth["parent_symbol_id"]
+  }
+  if parent_id == nil {
+    continue
+  }
+
+  // Get the receiver parameter to find the type expression
+  params := function_params(meth["id"])
+  receiver_type := ""
+  for _, p := range params {
+    if p["is_receiver"] {
+      receiver_type = p["type_expr"]
+      break
+    }
+  }
+
+  if receiver_type == "" {
+    continue
+  }
+
+  type_name := strip_pointer(receiver_type)
+
+  eb_map := {
+    member_symbol_id: meth["id"],
+    extended_type_expr: type_name,
+    extended_type_symbol_id: parent_id,
+    kind: "method",
+  }
+  insert_extension_binding(eb_map)
+}

@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "main", "kind": "package", "file": "main.go", "line": 1 },
+    { "name": "MaxRetries", "kind": "constant", "file": "main.go", "line": 5 },
+    { "name": "Debug", "kind": "variable", "file": "main.go", "line": 7 },
+    { "name": "Hello", "kind": "function", "file": "main.go", "line": 9 },
+    { "name": "add", "kind": "function", "file": "main.go", "line": 13 },
+    { "name": "main", "kind": "function", "file": "main.go", "line": 17 },
+    { "name": "result", "kind": "variable", "file": "main.go", "line": 19 }
+  ]
+}

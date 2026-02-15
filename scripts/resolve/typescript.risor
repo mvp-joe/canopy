@@ -1,0 +1,697 @@
+// TypeScript language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_scope_for_ref returns the innermost scope containing the reference position.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a scope upward to find the
+// enclosing function/method and returns its symbol_id.
+func find_caller_symbol_id(ref_scope_id) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(ref_scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" {
+            return sym_id
+          }
+        }
+        // Fallback: find function/method at this scope's position
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'function' OR kind = 'method') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// normalize_source strips leading ./ from an import source path and removes extensions.
+func normalize_source(source) {
+  result := source
+  if len(result) >= 2 && result[0] == "." && result[1] == "/" {
+    result = result[2:]
+  }
+  // Strip common extensions
+  extensions := [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
+  for _, ext := range extensions {
+    if len(result) > len(ext) {
+      end := result[len(result) - len(ext):]
+      if end == ext {
+        result = result[:len(result) - len(ext)]
+        break
+      }
+    }
+  }
+  return result
+}
+
+// get_basename extracts the last path component from a file path.
+func get_basename(path) {
+  parts := []
+  current := ""
+  for i := 0; i < len(path); i++ {
+    ch := path[i]
+    if ch == "/" {
+      if current != "" {
+        parts = parts.append(current)
+      }
+      current = ""
+    } else {
+      current = current + ch
+    }
+  }
+  if current != "" {
+    parts = parts.append(current)
+  }
+  if len(parts) == 0 {
+    return path
+  }
+  return parts[len(parts) - 1]
+}
+
+// strip_extension removes file extension from a basename.
+func strip_extension(basename) {
+  // Find last dot
+  last_dot := -1
+  for i := 0; i < len(basename); i++ {
+    if basename[i] == "." {
+      last_dot = i
+    }
+  }
+  if last_dot > 0 {
+    return basename[:last_dot]
+  }
+  return basename
+}
+
+// ========== Main resolution pipeline ==========
+
+ts_files := files_by_language("typescript")
+if len(ts_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+file_symbols_map := {}
+file_scopes_map := {}
+file_imports_map := {}
+// Map from file_id → file path
+file_path_map := {}
+// Map from normalized basename (no extension) → list of file_ids
+module_files_map := {}
+
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+
+  syms := symbols_by_file(fid)
+  file_symbols_map[fid_str] = syms
+
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+
+  fpath := ""
+  if "path" in f {
+    fpath = f["path"]
+  }
+  file_path_map[fid_str] = fpath
+
+  // Build module map from basename
+  if fpath != "" {
+    basename := get_basename(fpath)
+    mod_name := strip_extension(basename)
+    existing := []
+    if mod_name in module_files_map {
+      existing = module_files_map[mod_name]
+    }
+    existing = existing.append(fid)
+    module_files_map[mod_name] = existing
+  }
+}
+
+// --- Build import alias → source mapping per file ---
+file_import_alias_map := {}
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  imports := file_imports_map[fid_str]
+  alias_map := {}
+  for _, imp := range imports {
+    alias := ""
+    imp_kind := ""
+    if "kind" in imp {
+      imp_kind = imp["kind"]
+    }
+    if "local_alias" in imp && imp["local_alias"] != nil {
+      alias = imp["local_alias"]
+    }
+    if alias == "" && "imported_name" in imp && imp["imported_name"] != nil {
+      alias = imp["imported_name"]
+    }
+    if alias != "" && alias != "*" {
+      alias_map[alias] = imp
+    }
+    // For namespace imports, the alias is the local_alias
+    if imp_kind == "namespace" && "local_alias" in imp && imp["local_alias"] != nil {
+      alias_map[imp["local_alias"]] = imp
+    }
+  }
+  file_import_alias_map[fid_str] = alias_map
+}
+
+// Track which references have been resolved (ref_id → true)
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            ref_id_str := string(ref_id)
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          ref_id_str := string(ref_id)
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Cross-file import resolution ---
+// For TS, imports map a local alias to a source module.
+// We find files matching the source module and resolve named/default/namespace imports.
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  alias_map := file_import_alias_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+    ref_ctx := ""
+    if "context" in ref {
+      ref_ctx = ref["context"]
+    }
+
+    // Check if this reference name matches an import alias
+    if ref_name in alias_map {
+      imp := alias_map[ref_name]
+      imp_source := imp["source"]
+      imp_kind := ""
+      if "kind" in imp {
+        imp_kind = imp["kind"]
+      }
+
+      // Normalize the source to find matching files
+      norm_source := normalize_source(imp_source)
+
+      // For named imports, the imported name is the symbol to find in the source file
+      imported_name := ref_name
+      if "imported_name" in imp && imp["imported_name"] != nil {
+        imported_name = imp["imported_name"]
+      }
+
+      // Find files that match this module source
+      target_file_ids := []
+      // First try exact basename match
+      source_basename := get_basename(norm_source)
+      if source_basename in module_files_map {
+        target_file_ids = module_files_map[source_basename]
+      }
+      // Also try the full normalized path as a module name
+      if len(target_file_ids) == 0 && norm_source in module_files_map {
+        target_file_ids = module_files_map[norm_source]
+      }
+
+      for _, target_fid := range target_file_ids {
+        if target_fid == fid {
+          continue
+        }
+        target_fid_str := string(target_fid)
+        target_syms := file_symbols_map[target_fid_str]
+
+        if imp_kind == "default" {
+          // Default import: look for a "public" symbol (exported) in target file
+          // In TS/JS, the default export could be any symbol. We look for exported symbols.
+          for _, sym := range target_syms {
+            if sym["visibility"] == "public" {
+              insert_resolved_reference({
+                reference_id: ref_id,
+                target_symbol_id: sym["id"],
+                confidence: 0.8,
+                resolution_kind: "import",
+              })
+              resolved_set[ref_id_str] = true
+              break
+            }
+          }
+        } else if imp_kind == "namespace" {
+          // Namespace import: mark the namespace ref as resolved (it's the module itself)
+          // The actual symbol resolution happens in field_access below
+          resolved_set[ref_id_str] = true
+        } else {
+          // Named import: find the symbol by its imported name in the target file
+          for _, sym := range target_syms {
+            if sym["name"] == imported_name {
+              insert_resolved_reference({
+                reference_id: ref_id,
+                target_symbol_id: sym["id"],
+                confidence: 1.0,
+                resolution_kind: "import",
+              })
+              resolved_set[ref_id_str] = true
+              break
+            }
+          }
+        }
+        if ref_id_str in resolved_set {
+          break
+        }
+      }
+    }
+
+    // For field_access refs, check if there's an import-alias reference on the same line
+    // This handles "ns.Symbol" patterns (namespace imports or module.member)
+    if ref_ctx == "field_access" && !(ref_id_str in resolved_set) {
+      ref_line := ref["start_line"]
+      for _, other_ref := range refs {
+        other_name := other_ref["name"]
+        if other_name in alias_map && other_ref["start_line"] == ref_line {
+          imp := alias_map[other_name]
+          imp_source := imp["source"]
+          norm_source := normalize_source(imp_source)
+          source_basename := get_basename(norm_source)
+
+          target_file_ids := []
+          if source_basename in module_files_map {
+            target_file_ids = module_files_map[source_basename]
+          }
+          if len(target_file_ids) == 0 && norm_source in module_files_map {
+            target_file_ids = module_files_map[norm_source]
+          }
+
+          for _, target_fid := range target_file_ids {
+            if target_fid == fid {
+              continue
+            }
+            target_fid_str := string(target_fid)
+            target_syms := file_symbols_map[target_fid_str]
+            for _, sym := range target_syms {
+              if sym["name"] == ref_name && sym["visibility"] == "public" {
+                insert_resolved_reference({
+                  reference_id: ref_id,
+                  target_symbol_id: sym["id"],
+                  confidence: 1.0,
+                  resolution_kind: "import",
+                })
+                resolved_set[ref_id_str] = true
+                break
+              }
+            }
+            if ref_id_str in resolved_set {
+              break
+            }
+          }
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (c) Method/field resolution (class member access) ---
+// For field_access references not yet resolved, try matching against methods/fields
+// of classes and interfaces in the same project.
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_ctx := ""
+    if "context" in ref {
+      ref_ctx = ref["context"]
+    }
+    ref_name := ref["name"]
+
+    if ref_ctx == "field_access" {
+      // Look for methods with this name across all TS files
+      found := false
+      for _, other_f := range ts_files {
+        other_fid := other_f["id"]
+        other_fid_str := string(other_fid)
+        other_syms := file_symbols_map[other_fid_str]
+        for _, sym := range other_syms {
+          if sym["name"] == ref_name && sym["kind"] == "method" {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 0.8,
+              resolution_kind: "direct",
+            })
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+
+      // Check type members (interface/class members that may not be separate symbols)
+      if !found {
+        for _, other_f := range ts_files {
+          other_fid := other_f["id"]
+          other_fid_str := string(other_fid)
+          other_syms := file_symbols_map[other_fid_str]
+          for _, sym := range other_syms {
+            if sym["kind"] == "class" || sym["kind"] == "interface" {
+              members := type_members(sym["id"])
+              for _, mem := range members {
+                if mem["name"] == ref_name {
+                  insert_resolved_reference({
+                    reference_id: ref_id,
+                    target_symbol_id: sym["id"],
+                    confidence: 0.7,
+                    resolution_kind: "direct",
+                  })
+                  resolved_set[ref_id_str] = true
+                  found = true
+                  break
+                }
+              }
+              if found {
+                break
+              }
+            }
+          }
+          if found {
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- (d) Interface implementation detection ---
+// TypeScript uses explicit "implements" keyword. We detect this via:
+// 1. The extraction script records the "implements" clause as type_annotation refs
+// 2. We also do structural matching: check if a class has all methods of an interface
+
+all_interfaces := symbols_by_kind("interface")
+all_classes := symbols_by_kind("class")
+
+for _, iface := range all_interfaces {
+  iface_id := iface["id"]
+  iface_file_id := nil
+  if "file_id" in iface {
+    iface_file_id = iface["file_id"]
+  }
+  // Only consider interfaces in TS files
+  if iface_file_id == nil {
+    continue
+  }
+  iface_fid_str := string(iface_file_id)
+  if !(iface_fid_str in file_symbols_map) {
+    continue
+  }
+
+  iface_methods := type_members(iface_id)
+  iface_method_names := []
+  for _, m := range iface_methods {
+    if m["kind"] == "method" {
+      iface_method_names = iface_method_names.append(m["name"])
+    }
+  }
+  if len(iface_method_names) == 0 {
+    continue
+  }
+
+  for _, cls := range all_classes {
+    cls_id := cls["id"]
+    cls_file_id := nil
+    if "file_id" in cls {
+      cls_file_id = cls["file_id"]
+    }
+    if cls_file_id == nil {
+      continue
+    }
+    cls_fid_str := string(cls_file_id)
+    if !(cls_fid_str in file_symbols_map) {
+      continue
+    }
+
+    // Get class methods (symbols with parent_symbol_id == cls_id)
+    cls_methods := db_query(
+      "SELECT name FROM symbols WHERE parent_symbol_id = ? AND kind = 'method'",
+      cls_id,
+    )
+    cls_method_names := {}
+    for _, m := range cls_methods {
+      cls_method_names[m["name"]] = true
+    }
+
+    // Also check type_members
+    cls_members := type_members(cls_id)
+    for _, m := range cls_members {
+      if m["kind"] == "method" {
+        cls_method_names[m["name"]] = true
+      }
+    }
+
+    // Check if class has all interface methods
+    satisfies := true
+    for _, method_name := range iface_method_names {
+      if !(method_name in cls_method_names) {
+        satisfies = false
+        break
+      }
+    }
+
+    if satisfies {
+      impl_map := {
+        type_symbol_id: cls_id,
+        interface_symbol_id: iface_id,
+        kind: "structural",
+      }
+      if cls_file_id != nil {
+        impl_map["file_id"] = cls_file_id
+      }
+      insert_implementation(impl_map)
+    }
+  }
+}
+
+// --- (e) Call graph edge creation ---
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ""
+    if "context" in ref {
+      ref_ctx = ref["context"]
+    }
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}
+
+// --- (f) Extension bindings for class methods ---
+// In TS, methods defined inside a class are bound to the class type.
+all_methods := symbols_by_kind("method")
+for _, meth := range all_methods {
+  // Only consider methods in TS files
+  meth_file_id := nil
+  if "file_id" in meth {
+    meth_file_id = meth["file_id"]
+  }
+  if meth_file_id == nil {
+    continue
+  }
+  meth_fid_str := string(meth_file_id)
+  if !(meth_fid_str in file_symbols_map) {
+    continue
+  }
+
+  parent_id := nil
+  if "parent_symbol_id" in meth {
+    parent_id = meth["parent_symbol_id"]
+  }
+  if parent_id == nil {
+    continue
+  }
+
+  // Get the parent class/interface name
+  parent_rows := db_query(
+    "SELECT name, kind FROM symbols WHERE id = ?",
+    parent_id,
+  )
+  if len(parent_rows) == 0 {
+    continue
+  }
+  parent_name := parent_rows[0]["name"]
+  parent_kind := parent_rows[0]["kind"]
+
+  if parent_kind != "class" && parent_kind != "interface" {
+    continue
+  }
+
+  insert_extension_binding({
+    member_symbol_id: meth["id"],
+    extended_type_expr: parent_name,
+    extended_type_symbol_id: parent_id,
+    kind: "method",
+  })
+}

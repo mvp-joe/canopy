@@ -1,0 +1,577 @@
+// Python language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_scope_for_ref returns the innermost scope that contains the given reference.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a scope upward to find
+// the enclosing function/method and returns its symbol_id.
+func find_caller_symbol_id(ref_scope_id) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(ref_scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" || sym_kind == "static_method" || sym_kind == "class_method" || sym_kind == "property" {
+            return sym_id
+          }
+        }
+        // Fallback: find function/method symbol at this scope's position
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'function' OR kind = 'method' OR kind = 'static_method' OR kind = 'class_method') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// find_enclosing_class_id walks the scope chain to find the enclosing class scope
+// and returns the class symbol_id.
+func find_enclosing_class_id(scope_id) {
+  if scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "class" {
+      if "symbol_id" in sc {
+        return sc["symbol_id"]
+      }
+    }
+  }
+  return nil
+}
+
+// get_class_method_names returns a map of method_name -> symbol_id for all
+// methods (including static, class methods, properties) of a class.
+func get_class_method_names(class_sym_id) {
+  methods := db_query(
+    "SELECT id, name FROM symbols WHERE parent_symbol_id = ? AND (kind = 'method' OR kind = 'static_method' OR kind = 'class_method' OR kind = 'property')",
+    class_sym_id,
+  )
+  result := {}
+  for _, m := range methods {
+    result[m["name"]] = m["id"]
+  }
+  return result
+}
+
+// get_all_class_methods returns method names from a class and all its
+// ancestor classes (via base_class type_members). Returns map name -> symbol_id.
+func get_all_class_methods(class_sym_id, class_methods_cache) {
+  cs_str := string(class_sym_id)
+  if cs_str in class_methods_cache {
+    return class_methods_cache[cs_str]
+  }
+
+  result := get_class_method_names(class_sym_id)
+
+  // Walk base classes
+  members := type_members(class_sym_id)
+  for _, mem := range members {
+    if mem["kind"] == "base_class" {
+      base_name := mem["name"]
+      // Find the base class symbol
+      base_syms := db_query(
+        "SELECT id FROM symbols WHERE name = ? AND kind = 'class'",
+        base_name,
+      )
+      for _, bs := range base_syms {
+        parent_methods := get_all_class_methods(bs["id"], class_methods_cache)
+        for k, v := range parent_methods {
+          if !(k in result) {
+            result[k] = v
+          }
+        }
+      }
+    }
+  }
+
+  class_methods_cache[cs_str] = result
+  return result
+}
+
+
+// ========== Main resolution pipeline ==========
+
+py_files := files_by_language("python")
+if len(py_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+file_symbols_map := {}
+file_scopes_map := {}
+file_imports_map := {}
+// Map from file_id_str -> file path (for module matching)
+file_path_map := {}
+
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  file_symbols_map[fid_str] = symbols_by_file(fid)
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+  file_path_map[fid_str] = f["path"]
+}
+
+// --- Build import resolution map per file ---
+// For each file, build a map: local_name -> import record
+// "from foo import bar" => local_name "bar" -> import {source: "foo", imported_name: "bar"}
+// "from foo import bar as baz" => local_name "baz" -> import {source: "foo", imported_name: "bar"}
+// "import os" => local_name "os" -> import {source: "os", imported_name: "os", kind: "module"}
+file_import_name_map := {}
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  imports := file_imports_map[fid_str]
+  name_map := {}
+  for _, imp := range imports {
+    imp_kind := imp["kind"]
+    if imp_kind == "name" {
+      // from X import Y / from X import Y as Z
+      local := ""
+      if "local_alias" in imp && imp["local_alias"] != nil && imp["local_alias"] != "" {
+        local = imp["local_alias"]
+      } else {
+        local = imp["imported_name"]
+      }
+      if local != "" {
+        name_map[local] = imp
+      }
+    } else if imp_kind == "module" {
+      // import X — accessible as X.something
+      imported := imp["imported_name"]
+      if imported != nil && imported != "" {
+        name_map[imported] = imp
+      }
+    }
+    // wildcard imports handled separately
+  }
+  file_import_name_map[fid_str] = name_map
+}
+
+// Track resolved references
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+// Walk scope chain for each reference, matching against symbols in scope.
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            resolved_set[string(ref_id)] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          resolved_set[string(ref_id)] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Cross-file import resolution ---
+// For unresolved references that match an import name, find the target symbol
+// in the source module's files.
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  name_map := file_import_name_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    if ref_name in name_map {
+      imp := name_map[ref_name]
+      imp_kind := imp["kind"]
+
+      if imp_kind == "name" {
+        // "from foo import bar" — look for symbol named imported_name in source module files
+        source_mod := imp["source"]
+        target_name := imp["imported_name"]
+
+        // Find files that could be this module. We match by looking for
+        // Python files whose path ends with the module source as a path segment.
+        // For simplicity, just search all Python files for symbols with matching name.
+        target_syms := db_query(
+          "SELECT s.id, s.name, s.kind, s.file_id FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'python' AND f.id != ?",
+          target_name, fid,
+        )
+        for _, ts := range target_syms {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: ts["id"],
+            confidence: 0.9,
+            resolution_kind: "import",
+          })
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+      // "import os" references are module-level; don't resolve the module name itself
+      // (there's no symbol for the module package). Mark it so we skip it.
+      if imp_kind == "module" {
+        resolved_set[ref_id_str] = true
+      }
+    }
+  }
+
+  // Wildcard imports: from X import *
+  // For any still-unresolved refs, check if file has wildcard imports and
+  // search the source module for matching symbols.
+  imports := file_imports_map[fid_str]
+  has_wildcard := false
+  wildcard_sources := []
+  for _, imp := range imports {
+    if imp["kind"] == "wildcard" {
+      has_wildcard = true
+      wildcard_sources = wildcard_sources.append(imp["source"])
+    }
+  }
+
+  if has_wildcard {
+    for _, ref := range refs {
+      ref_id := ref["id"]
+      ref_id_str := string(ref_id)
+      if ref_id_str in resolved_set {
+        continue
+      }
+      ref_name := ref["name"]
+
+      // Search other Python files for public symbols with this name
+      target_syms := db_query(
+        "SELECT s.id FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'python' AND f.id != ? AND (s.visibility = 'public' OR s.visibility IS NULL)",
+        ref_name, fid,
+      )
+      if len(target_syms) > 0 {
+        insert_resolved_reference({
+          reference_id: ref_id,
+          target_symbol_id: target_syms[0]["id"],
+          confidence: 0.7,
+          resolution_kind: "import",
+        })
+        resolved_set[ref_id_str] = true
+      }
+    }
+  }
+}
+
+// --- (c) Method resolution (self.method(), cls.method(), obj.method()) ---
+// For "call" references with names matching class methods, resolve them.
+// Strategy: look for methods in all classes in the same file and across files.
+class_methods_cache := {}
+
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+    ref_ctx := ref["context"]
+
+    // For call references that are attribute calls (self.method(), obj.method()),
+    // the extraction emits a "call" context for the attribute name.
+    // Try to match against class methods.
+    if ref_ctx == "call" || ref_ctx == "field_access" {
+      // First, try to find the enclosing class (for self.method() pattern)
+      ref_scope := find_scope_for_ref(scopes, ref)
+      enclosing_class_id := nil
+      if ref_scope != nil {
+        enclosing_class_id = find_enclosing_class_id(ref_scope["id"])
+      }
+
+      if enclosing_class_id != nil {
+        // Check methods of enclosing class (including inherited)
+        all_methods := get_all_class_methods(enclosing_class_id, class_methods_cache)
+        if ref_name in all_methods {
+          target_id := all_methods[ref_name]
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: target_id,
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          resolved_set[ref_id_str] = true
+          continue
+        }
+      }
+
+      // Fallback: check all classes in the same file
+      found := false
+      file_syms := file_symbols_map[fid_str]
+      for _, sym := range file_syms {
+        if sym["kind"] == "class" {
+          all_methods := get_all_class_methods(sym["id"], class_methods_cache)
+          if ref_name in all_methods {
+            target_id := all_methods[ref_name]
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: target_id,
+              confidence: 0.8,
+              resolution_kind: "direct",
+            })
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+      }
+      if found {
+        continue
+      }
+
+      // Broader fallback: check all classes across all files
+      all_classes := symbols_by_kind("class")
+      for _, cls := range all_classes {
+        cls_fid := nil
+        if "file_id" in cls {
+          cls_fid = cls["file_id"]
+        }
+        if cls_fid == fid {
+          continue
+        }
+        all_methods := get_all_class_methods(cls["id"], class_methods_cache)
+        if ref_name in all_methods {
+          target_id := all_methods[ref_name]
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: target_id,
+            confidence: 0.7,
+            resolution_kind: "direct",
+          })
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (d) Class hierarchy (subclass -> superclass) ---
+// For each class with base_class type_members, create implementation records.
+all_classes := symbols_by_kind("class")
+for _, cls := range all_classes {
+  cls_id := cls["id"]
+  members := type_members(cls_id)
+  for _, mem := range members {
+    if mem["kind"] == "base_class" {
+      base_name := mem["name"]
+      // Find the base class symbol
+      base_syms := db_query(
+        "SELECT id, file_id FROM symbols WHERE name = ? AND kind = 'class'",
+        base_name,
+      )
+      for _, bs := range base_syms {
+        impl_map := {
+          type_symbol_id: cls_id,
+          interface_symbol_id: bs["id"],
+          kind: "explicit",
+        }
+        cls_file_id := nil
+        if "file_id" in cls {
+          cls_file_id = cls["file_id"]
+        }
+        if cls_file_id != nil {
+          impl_map["file_id"] = cls_file_id
+        }
+        insert_implementation(impl_map)
+      }
+    }
+  }
+}
+
+// --- (e) Call graph edge creation ---
+// For each resolved call reference, create caller -> callee edges.
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}
+
+// --- (f) Decorator resolution ---
+// Decorators are stored as annotations. Resolve annotation names to symbols.
+// Also resolve type_annotation references to base classes.
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  file_syms := file_symbols_map[fid_str]
+
+  // Check all symbols in this file for annotations
+  for _, sym := range file_syms {
+    anns := db_query(
+      "SELECT id, name, resolved_symbol_id FROM annotations WHERE target_symbol_id = ?",
+      sym["id"],
+    )
+    for _, ann := range anns {
+      if ann["resolved_symbol_id"] != nil {
+        continue
+      }
+      ann_name := ann["name"]
+      // Try to find the decorator as a symbol
+      dec_syms := db_query(
+        "SELECT id FROM symbols WHERE name = ? AND (kind = 'function' OR kind = 'class')",
+        ann_name,
+      )
+      if len(dec_syms) > 0 {
+        db_query(
+          "UPDATE annotations SET resolved_symbol_id = ? WHERE id = ?",
+          dec_syms[0]["id"], ann["id"],
+        )
+      }
+    }
+  }
+}

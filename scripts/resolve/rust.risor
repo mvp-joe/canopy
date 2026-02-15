@@ -1,0 +1,475 @@
+// Rust language resolution script for Canopy.
+//
+// This script works entirely with relational data in SQLite — NO tree-sitter access.
+// It receives these globals:
+//   files_by_language, symbols_by_file, symbols_by_name, symbols_by_kind
+//   references_by_file, scopes_by_file, imports_by_file
+//   type_members, function_params, scope_chain
+//   insert_resolved_reference, insert_implementation,
+//   insert_call_edge, insert_extension_binding
+//   db_query, log
+
+import strings
+
+// ========== Helper functions (define-before-use) ==========
+
+// find_scope_for_ref returns the innermost scope that contains the given reference.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a reference's scope upward
+// to find the enclosing function/method scope and returns its symbol_id.
+func find_caller_symbol_id(ref_scope_id) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  chain := scope_chain(ref_scope_id)
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        sym_rows := db_query(
+          "SELECT kind FROM symbols WHERE id = ?",
+          sym_id,
+        )
+        if len(sym_rows) > 0 {
+          sym_kind := sym_rows[0]["kind"]
+          if sym_kind == "function" || sym_kind == "method" {
+            return sym_id
+          }
+        }
+        // Fallback: find function/method symbol at this scope's position
+        scope_syms := db_query(
+          "SELECT id FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND (kind = 'function' OR kind = 'method') AND start_line = ? AND start_col = ?",
+          sc["id"], sc["start_line"], sc["start_col"],
+        )
+        if len(scope_syms) > 0 {
+          return scope_syms[0]["id"]
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// ========== Main resolution pipeline ==========
+
+rust_files := files_by_language("rust")
+if len(rust_files) == 0 {
+  // Nothing to resolve
+}
+
+// --- Build file-level data caches ---
+file_symbols_map := {}
+file_scopes_map := {}
+file_imports_map := {}
+
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  file_symbols_map[fid_str] = symbols_by_file(fid)
+  file_scopes_map[fid_str] = scopes_by_file(fid)
+  file_imports_map[fid_str] = imports_by_file(fid)
+}
+
+// --- Build import name → import_map per file ---
+// In Rust, `use std::collections::HashMap` makes "HashMap" available.
+// The imported_name is the last segment of the use path.
+file_import_name_map := {}
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  imports := file_imports_map[fid_str]
+  name_map := {}
+  for _, imp := range imports {
+    imported_name := ""
+    if "imported_name" in imp {
+      imported_name = imp["imported_name"]
+    }
+    // Check for local_alias (use X as Y)
+    alias := ""
+    if "local_alias" in imp {
+      alias = imp["local_alias"]
+    }
+    effective_name := imported_name
+    if alias != "" && alias != "_" {
+      effective_name = alias
+    }
+    if effective_name != "" && effective_name != "*" && effective_name != "_" {
+      name_map[effective_name] = imp
+    }
+  }
+  file_import_name_map[fid_str] = name_map
+}
+
+// Track which references have been resolved
+resolved_set := {}
+
+// --- (a) Single-file scope-based name resolution ---
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  file_syms := file_symbols_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_name := ref["name"]
+    ref_scope_id := nil
+    if "scope_id" in ref {
+      ref_scope_id = ref["scope_id"]
+    }
+
+    if ref_scope_id != nil {
+      chain := scope_chain(ref_scope_id)
+      found := false
+      for _, sc := range chain {
+        for _, sym := range file_syms {
+          if sym["name"] != ref_name {
+            continue
+          }
+          sym_line := sym["start_line"]
+          if sym_line >= sc["start_line"] && sym_line <= sc["end_line"] {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 1.0,
+              resolution_kind: "direct",
+            })
+            ref_id_str := string(ref_id)
+            resolved_set[ref_id_str] = true
+            found = true
+            break
+          }
+        }
+        if found {
+          break
+        }
+      }
+    } else {
+      // No scope_id — try file-level matching
+      for _, sym := range file_syms {
+        if sym["name"] == ref_name && sym["kind"] != "module" {
+          insert_resolved_reference({
+            reference_id: ref_id,
+            target_symbol_id: sym["id"],
+            confidence: 0.9,
+            resolution_kind: "direct",
+          })
+          ref_id_str := string(ref_id)
+          resolved_set[ref_id_str] = true
+          break
+        }
+      }
+    }
+  }
+}
+
+// --- (b) Use/import resolution ---
+// For references matching an imported name, resolve to symbols that match
+// the imported name across all files.
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  name_map := file_import_name_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_name := ref["name"]
+
+    // Check if this reference matches an imported name
+    if ref_name in name_map {
+      imp := name_map[ref_name]
+      imp_source := imp["source"]
+      imp_imported_name := ""
+      if "imported_name" in imp {
+        imp_imported_name = imp["imported_name"]
+      }
+
+      // Look for symbols with the imported name in all Rust files
+      target_syms := symbols_by_name(imp_imported_name)
+      for _, sym := range target_syms {
+        // Don't resolve to a symbol in the same file (already handled in scope resolution)
+        sym_file_id := nil
+        if "file_id" in sym {
+          sym_file_id = sym["file_id"]
+        }
+        if sym_file_id == fid {
+          continue
+        }
+        insert_resolved_reference({
+          reference_id: ref_id,
+          target_symbol_id: sym["id"],
+          confidence: 0.9,
+          resolution_kind: "import",
+        })
+        resolved_set[ref_id_str] = true
+        break
+      }
+    }
+  }
+}
+
+// --- (c) Method resolution ---
+// For "call" context references that weren't resolved above, try to match
+// against methods of types in all Rust files.
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    if ref_id_str in resolved_set {
+      continue
+    }
+    ref_ctx := ref["context"]
+    ref_name := ref["name"]
+
+    if ref_ctx == "call" || ref_ctx == "field_access" {
+      // Look for methods with this name across all files
+      for _, other_f := range rust_files {
+        other_fid := other_f["id"]
+        other_fid_str := string(other_fid)
+        other_syms := file_symbols_map[other_fid_str]
+        for _, sym := range other_syms {
+          if sym["name"] == ref_name && sym["kind"] == "method" {
+            insert_resolved_reference({
+              reference_id: ref_id,
+              target_symbol_id: sym["id"],
+              confidence: 0.8,
+              resolution_kind: "direct",
+            })
+            resolved_set[ref_id_str] = true
+            break
+          }
+        }
+        if ref_id_str in resolved_set {
+          break
+        }
+      }
+
+      // Also check struct fields for field_access
+      if ref_ctx == "field_access" && !(ref_id_str in resolved_set) {
+        for _, other_f := range rust_files {
+          other_fid := other_f["id"]
+          other_fid_str := string(other_fid)
+          other_syms := file_symbols_map[other_fid_str]
+          for _, sym := range other_syms {
+            if sym["kind"] == "struct" || sym["kind"] == "enum" {
+              members := type_members(sym["id"])
+              for _, mem := range members {
+                if mem["name"] == ref_name {
+                  insert_resolved_reference({
+                    reference_id: ref_id,
+                    target_symbol_id: sym["id"],
+                    confidence: 0.7,
+                    resolution_kind: "direct",
+                  })
+                  resolved_set[ref_id_str] = true
+                  break
+                }
+              }
+              if ref_id_str in resolved_set {
+                break
+              }
+            }
+          }
+          if ref_id_str in resolved_set {
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- (d) Trait implementation matching ---
+// Rust uses explicit trait implementations via `impl Trait for Type`.
+// Since the extraction doesn't record the trait-type relationship directly,
+// we match by checking if a type's methods satisfy a trait's required methods.
+// This is heuristic but effective for same-crate analysis.
+all_traits := symbols_by_kind("trait")
+all_structs := symbols_by_kind("struct")
+all_enums := symbols_by_kind("enum")
+
+// Combine structs and enums as potential implementors
+all_types := []
+for _, st := range all_structs {
+  all_types = all_types.append(st)
+}
+for _, en := range all_enums {
+  all_types = all_types.append(en)
+}
+
+for _, trait := range all_traits {
+  trait_id := trait["id"]
+  trait_methods := type_members(trait_id)
+
+  // Collect trait method names (only "method" kind, not embedded)
+  trait_method_names := []
+  for _, m := range trait_methods {
+    if m["kind"] == "method" {
+      trait_method_names = trait_method_names.append(m["name"])
+    }
+  }
+  if len(trait_method_names) == 0 {
+    continue
+  }
+
+  for _, typ := range all_types {
+    type_id := typ["id"]
+
+    // Get all methods on this type (methods with parent_symbol_id == type_id)
+    type_methods := db_query(
+      "SELECT name FROM symbols WHERE parent_symbol_id = ? AND kind = 'method'",
+      type_id,
+    )
+    type_method_names := {}
+    for _, m := range type_methods {
+      type_method_names[m["name"]] = true
+    }
+
+    // Check if type has all trait methods
+    satisfies := true
+    for _, method_name := range trait_method_names {
+      if !(method_name in type_method_names) {
+        satisfies = false
+        break
+      }
+    }
+
+    if satisfies {
+      impl_file_id := nil
+      if "file_id" in typ {
+        impl_file_id = typ["file_id"]
+      }
+
+      impl_map := {
+        type_symbol_id: type_id,
+        interface_symbol_id: trait_id,
+        kind: "explicit",
+      }
+      if impl_file_id != nil {
+        impl_map["file_id"] = impl_file_id
+      }
+      insert_implementation(impl_map)
+    }
+  }
+}
+
+// --- (e) Call graph edge creation ---
+for _, f := range rust_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  refs := references_by_file(fid)
+  scopes := file_scopes_map[fid_str]
+
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"])
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}
+
+// --- (f) Extension bindings for impl methods ---
+// In Rust, methods defined in `impl Type { ... }` blocks are extension bindings.
+all_methods := symbols_by_kind("method")
+for _, meth := range all_methods {
+  parent_id := nil
+  if "parent_symbol_id" in meth {
+    parent_id = meth["parent_symbol_id"]
+  }
+  if parent_id == nil {
+    continue
+  }
+
+  // Get the parent type name to use as extended_type_expr
+  parent_rows := db_query(
+    "SELECT name FROM symbols WHERE id = ?",
+    parent_id,
+  )
+  if len(parent_rows) == 0 {
+    continue
+  }
+  type_name := parent_rows[0]["name"]
+
+  insert_extension_binding({
+    member_symbol_id: meth["id"],
+    extended_type_expr: type_name,
+    extended_type_symbol_id: parent_id,
+    kind: "method",
+  })
+}

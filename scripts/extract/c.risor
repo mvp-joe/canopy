@@ -1,0 +1,648 @@
+// C language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the C source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+// extract_declarator_name walks a declarator tree to find the leaf identifier.
+// C declarators can be wrapped in pointer_declarator, parenthesized_declarator, etc.
+func extract_declarator_name(decl_node) {
+  t := decl_node.Type()
+  if t == "identifier" || t == "type_identifier" || t == "field_identifier" {
+    return node_text(decl_node)
+  }
+  if t == "pointer_declarator" || t == "parenthesized_declarator" || t == "array_declarator" {
+    inner := node_child(decl_node, "declarator")
+    if inner != nil {
+      return extract_declarator_name(inner)
+    }
+  }
+  if t == "function_declarator" {
+    inner := node_child(decl_node, "declarator")
+    if inner != nil {
+      return extract_declarator_name(inner)
+    }
+  }
+  return node_text(decl_node)
+}
+
+// extract_type_text returns the type portion of a declaration node.
+func extract_type_text(decl_node) {
+  tn := node_child(decl_node, "type")
+  if tn != nil {
+    return node_text(tn)
+  }
+  return ""
+}
+
+// extract_param_name gets the name from a parameter_declaration, unwrapping
+// pointer_declarator etc.
+func extract_param_name(param_node) {
+  dn := node_child(param_node, "declarator")
+  if dn == nil {
+    return ""
+  }
+  return extract_declarator_name(dn)
+}
+
+// extract_full_param_type reconstructs the full type including pointer/array from a parameter.
+func extract_full_param_type(param_node) {
+  type_node := node_child(param_node, "type")
+  decl_node := node_child(param_node, "declarator")
+  base := ""
+  if type_node != nil {
+    base = node_text(type_node)
+  }
+  if decl_node == nil {
+    return base
+  }
+  // Check if declarator is pointer_declarator, array_declarator, etc.
+  dt := decl_node.Type()
+  if dt == "pointer_declarator" {
+    return base + " *"
+  }
+  if dt == "abstract_pointer_declarator" {
+    return base + " *"
+  }
+  return base
+}
+
+func extract_c_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    if param.Type() != "parameter_declaration" {
+      continue
+    }
+    pname := extract_param_name(param)
+    ptype := extract_full_param_type(param)
+
+    insert_function_param({
+      symbol_id: sym_id,
+      name: pname,
+      ordinal: ordinal,
+      type_expr: ptype,
+      is_receiver: false,
+      is_return: false,
+    })
+    ordinal = ordinal + 1
+  }
+}
+
+func extract_block_scopes(node, parent_scope_id) {
+  block_types := ["if_statement", "for_statement", "while_statement",
+                   "switch_statement", "do_statement"]
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    child_type := child.Type()
+
+    found := false
+    for _, bt := range block_types {
+      if child_type == bt {
+        found = true
+        break
+      }
+    }
+
+    if found {
+      block_scope_id := insert_scope({
+        file_id: file_id,
+        kind: "block",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+      })
+      extract_block_scopes(child, block_scope_id)
+    } else {
+      extract_block_scopes(child, parent_scope_id)
+    }
+  }
+}
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "c")
+root := tree.RootNode()
+
+// --- Includes ---
+include_matches := query("(preproc_include) @inc", root)
+for _, m := range include_matches {
+  inc_node := m["inc"]
+  path_node := node_child(inc_node, "path")
+  if path_node == nil {
+    continue
+  }
+  raw_path := node_text(path_node)
+  // Strip angle brackets or quotes
+  source := raw_path
+  if len(raw_path) >= 2 {
+    first := raw_path[0]
+    if first == "<" || first == "\"" {
+      source = raw_path[1:len(raw_path)-1]
+    }
+  }
+
+  insert_import({
+    file_id: file_id,
+    source: source,
+    imported_name: source,
+    kind: "header",
+    scope: "file",
+  })
+}
+
+// --- Struct declarations ---
+struct_matches := query("(struct_specifier name: (type_identifier) @name body: (field_declaration_list) @body) @struct", root)
+for _, m := range struct_matches {
+  name_node := m["name"]
+  struct_node := m["struct"]
+  body_node := m["body"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "struct",
+    visibility: "public",
+    start_line: start_line(struct_node),
+    start_col: start_col(struct_node),
+    end_line: end_line(struct_node),
+    end_col: end_col(struct_node),
+  })
+
+  // Extract fields
+  field_matches := query("(field_declaration) @field", body_node)
+  for _, fm := range field_matches {
+    field_node := fm["field"]
+    f_dn := node_child(field_node, "declarator")
+    f_tn := node_child(field_node, "type")
+
+    // Skip function declarators (those are not fields in C structs
+    // unless it's a function pointer — but the field_identifier is the
+    // important thing)
+    if f_dn != nil {
+      field_name := extract_declarator_name(f_dn)
+      field_type := ""
+      if f_tn != nil {
+        field_type = node_text(f_tn)
+      }
+      insert_type_member({
+        symbol_id: sym_id,
+        name: field_name,
+        kind: "field",
+        type_expr: field_type,
+        visibility: "public",
+      })
+    }
+  }
+}
+
+// --- Typedef declarations ---
+typedef_matches := query("(type_definition) @td", root)
+for _, m := range typedef_matches {
+  td_node := m["td"]
+  decl_node := node_child(td_node, "declarator")
+  type_node := node_child(td_node, "type")
+
+  if decl_node == nil {
+    continue
+  }
+
+  name := extract_declarator_name(decl_node)
+  type_expr := ""
+  if type_node != nil {
+    type_expr = node_text(type_node)
+  }
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "type_alias",
+    visibility: "public",
+    start_line: start_line(td_node),
+    start_col: start_col(td_node),
+    end_line: end_line(td_node),
+    end_col: end_col(td_node),
+  })
+}
+
+// --- Enum declarations ---
+enum_matches := query("(enum_specifier name: (type_identifier) @name body: (enumerator_list) @body) @enum", root)
+for _, m := range enum_matches {
+  name_node := m["name"]
+  enum_node := m["enum"]
+  body_node := m["body"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "enum",
+    visibility: "public",
+    start_line: start_line(enum_node),
+    start_col: start_col(enum_node),
+    end_line: end_line(enum_node),
+    end_col: end_col(enum_node),
+  })
+
+  // Extract enumerators as type_members with kind="variant"
+  enumerator_matches := query("(enumerator name: (identifier) @name) @en", body_node)
+  for _, em := range enumerator_matches {
+    en_name := node_text(em["name"])
+    insert_type_member({
+      symbol_id: sym_id,
+      name: en_name,
+      kind: "variant",
+      type_expr: "",
+      visibility: "public",
+    })
+  }
+}
+
+// --- Macro definitions ---
+// Value macros: #define NAME value
+def_matches := query("(preproc_def name: (identifier) @name) @def", root)
+for _, m := range def_matches {
+  name_node := m["name"]
+  def_node := m["def"]
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "constant",
+    visibility: "public",
+    start_line: start_line(def_node),
+    start_col: start_col(def_node),
+    end_line: end_line(def_node),
+    end_col: end_col(def_node),
+  })
+}
+
+// Function-like macros: #define NAME(params) body
+fndef_matches := query("(preproc_function_def name: (identifier) @name) @def", root)
+for _, m := range fndef_matches {
+  name_node := m["name"]
+  def_node := m["def"]
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "function",
+    visibility: "public",
+    start_line: start_line(def_node),
+    start_col: start_col(def_node),
+    end_line: end_line(def_node),
+    end_col: end_col(def_node),
+  })
+}
+
+// --- Function definitions ---
+funcdef_matches := query("(function_definition type: (_) @type declarator: (function_declarator) @fdecl) @func", root)
+for _, m := range funcdef_matches {
+  func_node := m["func"]
+  fdecl_node := m["fdecl"]
+  type_node := m["type"]
+
+  name_node := node_child(fdecl_node, "declarator")
+  if name_node == nil {
+    continue
+  }
+  name := extract_declarator_name(name_node)
+  ret_type := node_text(type_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "function",
+    visibility: "public",
+    start_line: start_line(func_node),
+    start_col: start_col(func_node),
+    end_line: end_line(func_node),
+    end_col: end_col(func_node),
+  })
+
+  // Extract parameters
+  params_node := node_child(fdecl_node, "parameters")
+  if params_node != nil {
+    extract_c_params(sym_id, params_node)
+  }
+
+  // Insert return type
+  if ret_type != "" && ret_type != "void" {
+    insert_function_param({
+      symbol_id: sym_id,
+      name: "",
+      ordinal: 0,
+      type_expr: ret_type,
+      is_receiver: false,
+      is_return: true,
+    })
+  }
+}
+
+// --- Function declarations (prototypes, not definitions) ---
+// In C, a top-level declaration with a function_declarator but no body
+// is a forward declaration. We match declarations that contain function_declarator.
+proto_matches := query("(declaration type: (_) @type declarator: (function_declarator) @fdecl) @decl", root)
+for _, m := range proto_matches {
+  decl_node := m["decl"]
+  fdecl_node := m["fdecl"]
+  type_node := m["type"]
+
+  name_node := node_child(fdecl_node, "declarator")
+  if name_node == nil {
+    continue
+  }
+  name := extract_declarator_name(name_node)
+
+  // Check if this name already exists (from function_definition)
+  existing := find_symbol_id(name)
+  if existing != nil {
+    continue
+  }
+
+  ret_type := node_text(type_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "function",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+
+  params_node := node_child(fdecl_node, "parameters")
+  if params_node != nil {
+    extract_c_params(sym_id, params_node)
+  }
+
+  if ret_type != "" && ret_type != "void" {
+    insert_function_param({
+      symbol_id: sym_id,
+      name: "",
+      ordinal: 0,
+      type_expr: ret_type,
+      is_receiver: false,
+      is_return: true,
+    })
+  }
+}
+
+// --- Global variable declarations ---
+// Match top-level declarations with init_declarator or plain identifier
+// but NOT function_declarator (those are function prototypes).
+global_decl_matches := query("(declaration type: (_) @type declarator: (init_declarator declarator: (identifier) @name)) @decl", root)
+for _, m := range global_decl_matches {
+  name_node := m["name"]
+  decl_node := m["decl"]
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "variable",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+}
+
+// Plain declarations (no initializer): int x;
+plain_decl_matches := query("(declaration type: (_) @type declarator: (identifier) @name) @decl", root)
+for _, m := range plain_decl_matches {
+  name_node := m["name"]
+  decl_node := m["decl"]
+  // Skip if already added or if parent is not translation_unit
+  existing := find_symbol_id(node_text(name_node))
+  if existing != nil {
+    continue
+  }
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "variable",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+}
+
+// Pointer variable declarations: int *ptr;
+ptr_decl_matches := query("(declaration type: (_) @type declarator: (pointer_declarator declarator: (identifier) @name)) @decl", root)
+for _, m := range ptr_decl_matches {
+  name_node := m["name"]
+  decl_node := m["decl"]
+  existing := find_symbol_id(node_text(name_node))
+  if existing != nil {
+    continue
+  }
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "variable",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+}
+
+// Init pointer declarations: static const char *name = "test";
+init_ptr_matches := query("(declaration type: (_) @type declarator: (init_declarator declarator: (pointer_declarator declarator: (identifier) @name))) @decl", root)
+for _, m := range init_ptr_matches {
+  name_node := m["name"]
+  decl_node := m["decl"]
+  existing := find_symbol_id(node_text(name_node))
+  if existing != nil {
+    continue
+  }
+  insert_symbol({
+    file_id: file_id,
+    name: node_text(name_node),
+    kind: "variable",
+    visibility: "public",
+    start_line: start_line(decl_node),
+    start_col: start_col(decl_node),
+    end_line: end_line(decl_node),
+    end_col: end_col(decl_node),
+  })
+}
+
+// --- Scope tree ---
+file_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "file",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Function scopes
+fn_scope_matches := query("(function_definition) @fn", root)
+for _, m := range fn_scope_matches {
+  fn_node := m["fn"]
+  fdecl := node_child(fn_node, "declarator")
+  fn_sym_id := nil
+  if fdecl != nil {
+    nn := node_child(fdecl, "declarator")
+    if nn != nil {
+      fn_sym_id = find_symbol_id(extract_declarator_name(nn))
+    }
+  }
+  scope_map := {
+    file_id: file_id,
+    kind: "function",
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+    parent_scope_id: file_scope_id,
+  }
+  if fn_sym_id != nil {
+    scope_map["symbol_id"] = fn_sym_id
+  }
+  fn_scope_id := insert_scope(scope_map)
+  body_node := node_child(fn_node, "body")
+  if body_node != nil {
+    extract_block_scopes(body_node, fn_scope_id)
+  }
+}
+
+// --- References ---
+
+// Simple function calls: bar()
+call_matches := query("(call_expression function: (identifier) @name) @call", root)
+for _, m := range call_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Field access via -> or . (field_expression)
+// Method-like calls: ptr->method(1, 2) — the field_expression is inside call_expression
+field_call_matches := query("(call_expression function: (field_expression argument: (_) @obj field: (field_identifier) @field))", root)
+for _, m := range field_call_matches {
+  field_node := m["field"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(field_node),
+    context: "call",
+    start_line: start_line(field_node),
+    start_col: start_col(field_node),
+    end_line: end_line(field_node),
+    end_col: end_col(field_node),
+  })
+}
+
+// Non-call field access: obj->field, obj.field
+field_matches := query("(field_expression argument: (_) @obj field: (field_identifier) @field) @fexpr", root)
+for _, m := range field_matches {
+  fexpr_node := m["fexpr"]
+  parent := fexpr_node.Parent()
+  if parent != nil && parent.Type() == "call_expression" {
+    // Already handled above as a call
+  } else {
+    field_node := m["field"]
+    insert_reference({
+      file_id: file_id,
+      name: node_text(field_node),
+      context: "field_access",
+      start_line: start_line(field_node),
+      start_col: start_col(field_node),
+      end_line: end_line(field_node),
+      end_col: end_col(field_node),
+    })
+  }
+}
+
+// Type references: type_identifier used in declarations, params, casts, etc.
+type_ref_matches := query("(type_identifier) @type_id", root)
+for _, m := range type_ref_matches {
+  tn := m["type_id"]
+  type_name := node_text(tn)
+
+  // Skip if this is the name of a struct/enum/typedef definition
+  parent := tn.Parent()
+  is_decl := false
+  if parent != nil {
+    pt := parent.Type()
+    if pt == "struct_specifier" || pt == "enum_specifier" {
+      p_name := node_child(parent, "name")
+      if p_name != nil && node_text(p_name) == type_name {
+        is_decl = true
+      }
+    }
+    if pt == "type_definition" {
+      p_decl := node_child(parent, "declarator")
+      if p_decl != nil && node_text(p_decl) == type_name {
+        is_decl = true
+      }
+    }
+  }
+
+  if !is_decl {
+    insert_reference({
+      file_id: file_id,
+      name: type_name,
+      context: "type_annotation",
+      start_line: start_line(tn),
+      start_col: start_col(tn),
+      end_line: end_line(tn),
+      end_col: end_col(tn),
+    })
+  }
+}

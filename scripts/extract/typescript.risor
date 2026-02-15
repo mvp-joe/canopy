@@ -1,0 +1,1058 @@
+// TypeScript language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the TypeScript source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param,
+//   insert_annotation
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func visibility_for_ts(name) {
+  // In TS/JS, everything is "public" at the module level unless explicitly
+  // declared private/protected inside a class. We mark export-level symbols
+  // as "public" and non-exported as "private". Class member visibility is
+  // handled separately from access modifiers.
+  return "public"
+}
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+func ts_member_visibility(member_node) {
+  // Check for accessibility_modifier child (private, protected, public)
+  count := int(member_node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := member_node.NamedChild(i)
+    if child.Type() == "accessibility_modifier" {
+      mod := node_text(child)
+      if mod == "private" || mod == "protected" {
+        return mod
+      }
+    }
+  }
+  return "public"
+}
+
+func extract_ts_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    param_type := param.Type()
+
+    if param_type != "required_parameter" && param_type != "optional_parameter" {
+      continue
+    }
+
+    // Get parameter name via "pattern" field (works for identifier and rest_pattern)
+    nn := node_child(param, "pattern")
+    param_name := ""
+    if nn != nil {
+      if nn.Type() == "rest_pattern" {
+        // ...args — get the inner identifier
+        inner := nn.NamedChild(0)
+        if inner != nil {
+          param_name = node_text(inner)
+        }
+      } else {
+        param_name = node_text(nn)
+      }
+    }
+
+    // Get type annotation via "type" field — this returns a type_annotation node
+    // that includes ": type", so we must extract the child for the actual type.
+    type_expr := ""
+    ta := node_child(param, "type")
+    if ta != nil && ta.NamedChildCount() > 0 {
+      type_expr = node_text(ta.NamedChild(0))
+    }
+
+    // Check for default value via "value" field
+    has_default := false
+    default_expr := ""
+    val := node_child(param, "value")
+    if val != nil {
+      has_default = true
+      default_expr = node_text(val)
+    }
+
+    insert_function_param({
+      symbol_id: sym_id,
+      name: param_name,
+      ordinal: ordinal,
+      type_expr: type_expr,
+      is_receiver: false,
+      is_return: false,
+      has_default: has_default,
+      default_expr: default_expr,
+    })
+    ordinal = ordinal + 1
+  }
+}
+
+func extract_return_type(sym_id, func_node) {
+  // Return type is available via the "return_type" field name.
+  // It returns a type_annotation node (": type"), so extract its child.
+  rt := node_child(func_node, "return_type")
+  if rt != nil && rt.NamedChildCount() > 0 {
+    type_expr := node_text(rt.NamedChild(0))
+    insert_function_param({
+      symbol_id: sym_id,
+      name: "",
+      ordinal: 0,
+      type_expr: type_expr,
+      is_receiver: false,
+      is_return: true,
+    })
+  }
+}
+
+func extract_type_params(sym_id, container_node) {
+  tp_matches := query("(type_parameters (type_parameter) @tp)", container_node)
+  ordinal := 0
+  for _, tp := range tp_matches {
+    tp_node := tp["tp"]
+    // First child is the type name (type_identifier)
+    tp_name := ""
+    constraint := ""
+    pc := int(tp_node.NamedChildCount())
+    for i := 0; i < pc; i++ {
+      ch := tp_node.NamedChild(i)
+      if ch.Type() == "type_identifier" && tp_name == "" {
+        tp_name = node_text(ch)
+      } else if ch.Type() == "constraint" {
+        // constraint child has a type inside
+        if ch.NamedChildCount() > 0 {
+          constraint = node_text(ch.NamedChild(0))
+        }
+      }
+    }
+    if tp_name != "" {
+      insert_type_param({
+        symbol_id: sym_id,
+        name: tp_name,
+        ordinal: ordinal,
+        param_kind: "type",
+        constraints: constraint,
+      })
+      ordinal = ordinal + 1
+    }
+  }
+}
+
+func extract_block_scopes(node, parent_scope_id) {
+  block_types := ["if_statement", "for_statement", "for_in_statement",
+                   "while_statement", "switch_statement", "try_statement",
+                   "do_statement"]
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    child_type := child.Type()
+
+    found := false
+    for _, bt := range block_types {
+      if child_type == bt {
+        found = true
+        break
+      }
+    }
+
+    if found {
+      block_scope_id := insert_scope({
+        file_id: file_id,
+        kind: "block",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+      })
+      extract_block_scopes(child, block_scope_id)
+    } else {
+      extract_block_scopes(child, parent_scope_id)
+    }
+  }
+}
+
+func extract_decorators(sym_id, decl_node) {
+  dec_matches := query("(decorator) @dec", decl_node)
+  for _, dm := range dec_matches {
+    dec_node := dm["dec"]
+    // Decorator could be @Name or @Name(args)
+    // The child is either an identifier or call_expression
+    dec_name := ""
+    dec_args := ""
+    first_child := dec_node.NamedChild(0)
+    if first_child != nil {
+      if first_child.Type() == "identifier" {
+        dec_name = node_text(first_child)
+      } else if first_child.Type() == "call_expression" {
+        fn_node := node_child(first_child, "function")
+        if fn_node != nil {
+          dec_name = node_text(fn_node)
+        }
+        args_node := node_child(first_child, "arguments")
+        if args_node != nil {
+          dec_args = node_text(args_node)
+        }
+      }
+    }
+    if dec_name != "" {
+      insert_annotation({
+        target_symbol_id: sym_id,
+        name: dec_name,
+        arguments: dec_args,
+        file_id: file_id,
+        line: start_line(dec_node),
+        col: start_col(dec_node),
+      })
+    }
+  }
+}
+
+// Track which node IDs we've already processed as exported declarations
+// to avoid double-inserting symbols.
+exported_decl_set := {}
+
+func is_default_export(export_node) {
+  // Check if any child is "default" keyword
+  count := int(export_node.ChildCount())
+  for i := 0; i < count; i++ {
+    child := export_node.Child(i)
+    if node_text(child) == "default" {
+      return true
+    }
+  }
+  return false
+}
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "typescript")
+root := tree.RootNode()
+
+// --- Imports ---
+// Named imports: import { foo, bar } from './module'
+// Namespace imports: import * as utils from './utils'
+// Default imports: import defaultExport from './default'
+// Type imports: import type { MyType } from './types'
+
+import_matches := query("(import_statement) @stmt", root)
+for _, m := range import_matches {
+  stmt_node := m["stmt"]
+
+  // Get the source string
+  src_matches := query("(import_statement (string (string_fragment) @src))", stmt_node)
+  source := ""
+  if len(src_matches) > 0 {
+    source = node_text(src_matches[0]["src"])
+  }
+  if source == "" {
+    continue
+  }
+
+  // Check for import clause
+  clause_matches := query("(import_statement (import_clause) @clause)", stmt_node)
+  if len(clause_matches) == 0 {
+    // Side-effect import: import './module'
+    insert_import({
+      file_id: file_id,
+      source: source,
+      kind: "side_effect",
+      scope: "file",
+    })
+    continue
+  }
+
+  clause := clause_matches[0]["clause"]
+
+  // Check for named imports: { foo, bar }
+  named_matches := query("(named_imports (import_specifier) @spec)", clause)
+  for _, nm := range named_matches {
+    spec := nm["spec"]
+    // import_specifier has one or two identifiers (name, alias)
+    spec_children := []
+    sc := int(spec.NamedChildCount())
+    for i := 0; i < sc; i++ {
+      spec_children = spec_children + [spec.NamedChild(i)]
+    }
+
+    if len(spec_children) >= 2 {
+      // import { orig as alias } from ...
+      imported_name := node_text(spec_children[0])
+      local_alias := node_text(spec_children[1])
+      insert_import({
+        file_id: file_id,
+        source: source,
+        imported_name: imported_name,
+        local_alias: local_alias,
+        kind: "named",
+        scope: "file",
+      })
+    } else if len(spec_children) == 1 {
+      imported_name := node_text(spec_children[0])
+      insert_import({
+        file_id: file_id,
+        source: source,
+        imported_name: imported_name,
+        kind: "named",
+        scope: "file",
+      })
+    }
+  }
+
+  // Check for namespace import: * as utils
+  ns_matches := query("(namespace_import (identifier) @name)", clause)
+  for _, nsm := range ns_matches {
+    alias := node_text(nsm["name"])
+    insert_import({
+      file_id: file_id,
+      source: source,
+      imported_name: "*",
+      local_alias: alias,
+      kind: "namespace",
+      scope: "file",
+    })
+  }
+
+  // Check for default import (direct identifier child of import_clause)
+  // The default import is an identifier that is a direct child of import_clause,
+  // NOT inside named_imports or namespace_import
+  if len(named_matches) == 0 && len(ns_matches) == 0 {
+    // The whole clause might be a default import
+    cc := int(clause.NamedChildCount())
+    for i := 0; i < cc; i++ {
+      ch := clause.NamedChild(i)
+      if ch.Type() == "identifier" {
+        insert_import({
+          file_id: file_id,
+          source: source,
+          imported_name: node_text(ch),
+          kind: "default",
+          scope: "file",
+        })
+      }
+    }
+  }
+}
+
+// --- Function declarations ---
+func_matches := query("(function_declaration name: (identifier) @name) @func", root)
+for _, m := range func_matches {
+  name_node := m["name"]
+  func_node := m["func"]
+  name := node_text(name_node)
+
+  // Check if this function is inside an export_statement
+  vis := "private"
+  parent := func_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "function",
+    visibility: vis,
+    start_line: start_line(func_node),
+    start_col: start_col(func_node),
+    end_line: end_line(func_node),
+    end_col: end_col(func_node),
+  })
+
+  // Extract parameters
+  params_node := node_child(func_node, "parameters")
+  if params_node != nil {
+    extract_ts_params(sym_id, params_node)
+  }
+
+  // Extract return type
+  extract_return_type(sym_id, func_node)
+
+  // Extract type parameters
+  extract_type_params(sym_id, func_node)
+}
+
+// --- Class declarations (including abstract classes) ---
+class_queries := [
+  "(class_declaration name: (type_identifier) @name) @class",
+  "(abstract_class_declaration name: (type_identifier) @name) @class",
+]
+for _, cq := range class_queries {
+  class_matches := query(cq, root)
+  for _, m := range class_matches {
+    name_node := m["name"]
+    class_node := m["class"]
+    name := node_text(name_node)
+
+    vis := "private"
+    parent := class_node.Parent()
+    if parent != nil && parent.Type() == "export_statement" {
+      vis = "public"
+    }
+
+    sym_id := insert_symbol({
+      file_id: file_id,
+      name: name,
+      kind: "class",
+      visibility: vis,
+      start_line: start_line(class_node),
+      start_col: start_col(class_node),
+      end_line: end_line(class_node),
+      end_col: end_col(class_node),
+    })
+
+    // Extract decorators on the class
+    extract_decorators(sym_id, class_node)
+
+    // Extract type parameters
+    extract_type_params(sym_id, class_node)
+
+    // Extract class body members
+    body_matches := query("(class_body) @body", class_node)
+    if len(body_matches) > 0 {
+      body := body_matches[0]["body"]
+      body_count := int(body.NamedChildCount())
+      for i := 0; i < body_count; i++ {
+        member := body.NamedChild(i)
+        member_type := member.Type()
+
+        if member_type == "public_field_definition" {
+          // Property: name, type_annotation, optional default
+          prop_name := ""
+          prop_type := ""
+          prop_vis := ts_member_visibility(member)
+
+          pc := int(member.NamedChildCount())
+          for j := 0; j < pc; j++ {
+            ch := member.NamedChild(j)
+            ch_type := ch.Type()
+            if ch_type == "property_identifier" {
+              prop_name = node_text(ch)
+            } else if ch_type == "type_annotation" {
+              if ch.NamedChildCount() > 0 {
+                prop_type = node_text(ch.NamedChild(0))
+              }
+            }
+          }
+          if prop_name != "" {
+            insert_type_member({
+              symbol_id: sym_id,
+              name: prop_name,
+              kind: "property",
+              type_expr: prop_type,
+              visibility: prop_vis,
+            })
+          }
+        } else if member_type == "method_definition" {
+          // Method: name, parameters, return type
+          meth_name := ""
+          pc := int(member.NamedChildCount())
+          for j := 0; j < pc; j++ {
+            ch := member.NamedChild(j)
+            if ch.Type() == "property_identifier" {
+              meth_name = node_text(ch)
+              break
+            }
+          }
+          if meth_name != "" {
+            meth_vis := ts_member_visibility(member)
+            meth_sym_id := insert_symbol({
+              file_id: file_id,
+              name: meth_name,
+              kind: "method",
+              visibility: meth_vis,
+              parent_symbol_id: sym_id,
+              start_line: start_line(member),
+              start_col: start_col(member),
+              end_line: end_line(member),
+              end_col: end_col(member),
+            })
+
+            insert_type_member({
+              symbol_id: sym_id,
+              name: meth_name,
+              kind: "method",
+              type_expr: "",
+              visibility: meth_vis,
+            })
+
+            // Extract method parameters
+            meth_params := node_child(member, "parameters")
+            if meth_params != nil {
+              extract_ts_params(meth_sym_id, meth_params)
+            }
+
+            // Extract method return type
+            extract_return_type(meth_sym_id, member)
+
+            // Extract decorators on methods
+            extract_decorators(meth_sym_id, member)
+          }
+        } else if member_type == "abstract_method_signature" {
+          // Abstract method: name, parameters, return type
+          meth_name := ""
+          pc := int(member.NamedChildCount())
+          for j := 0; j < pc; j++ {
+            ch := member.NamedChild(j)
+            if ch.Type() == "property_identifier" {
+              meth_name = node_text(ch)
+              break
+            }
+          }
+          if meth_name != "" {
+            insert_type_member({
+              symbol_id: sym_id,
+              name: meth_name,
+              kind: "method",
+              type_expr: "",
+              visibility: "public",
+            })
+          }
+        }
+      }
+    }
+  }
+}
+
+// --- Interface declarations ---
+iface_matches := query("(interface_declaration name: (type_identifier) @name) @iface", root)
+for _, m := range iface_matches {
+  name_node := m["name"]
+  iface_node := m["iface"]
+  name := node_text(name_node)
+
+  vis := "private"
+  parent := iface_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "interface",
+    visibility: vis,
+    start_line: start_line(iface_node),
+    start_col: start_col(iface_node),
+    end_line: end_line(iface_node),
+    end_col: end_col(iface_node),
+  })
+
+  // Extract type parameters
+  extract_type_params(sym_id, iface_node)
+
+  // Extract interface members
+  body_matches := query("(interface_body) @body", iface_node)
+  if len(body_matches) > 0 {
+    body := body_matches[0]["body"]
+    bc := int(body.NamedChildCount())
+    for i := 0; i < bc; i++ {
+      member := body.NamedChild(i)
+      member_type := member.Type()
+
+      if member_type == "method_signature" {
+        meth_name := ""
+        pc := int(member.NamedChildCount())
+        for j := 0; j < pc; j++ {
+          ch := member.NamedChild(j)
+          if ch.Type() == "property_identifier" {
+            meth_name = node_text(ch)
+            break
+          }
+        }
+        if meth_name != "" {
+          insert_type_member({
+            symbol_id: sym_id,
+            name: meth_name,
+            kind: "method",
+            type_expr: "",
+            visibility: "public",
+          })
+        }
+      } else if member_type == "property_signature" {
+        prop_name := ""
+        prop_type := ""
+        pc := int(member.NamedChildCount())
+        for j := 0; j < pc; j++ {
+          ch := member.NamedChild(j)
+          ch_type := ch.Type()
+          if ch_type == "property_identifier" {
+            prop_name = node_text(ch)
+          } else if ch_type == "type_annotation" {
+            if ch.NamedChildCount() > 0 {
+              prop_type = node_text(ch.NamedChild(0))
+            }
+          }
+        }
+        if prop_name != "" {
+          insert_type_member({
+            symbol_id: sym_id,
+            name: prop_name,
+            kind: "property",
+            type_expr: prop_type,
+            visibility: "public",
+          })
+        }
+      }
+    }
+  }
+}
+
+// --- Type alias declarations ---
+alias_matches := query("(type_alias_declaration name: (type_identifier) @name) @alias", root)
+for _, m := range alias_matches {
+  name_node := m["name"]
+  alias_node := m["alias"]
+  name := node_text(name_node)
+
+  vis := "private"
+  parent := alias_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "type_alias",
+    visibility: vis,
+    start_line: start_line(alias_node),
+    start_col: start_col(alias_node),
+    end_line: end_line(alias_node),
+    end_col: end_col(alias_node),
+  })
+
+  extract_type_params(sym_id, alias_node)
+}
+
+// --- Enum declarations ---
+enum_matches := query("(enum_declaration name: (identifier) @name) @enum", root)
+for _, m := range enum_matches {
+  name_node := m["name"]
+  enum_node := m["enum"]
+  name := node_text(name_node)
+
+  vis := "private"
+  parent := enum_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "enum",
+    visibility: vis,
+    start_line: start_line(enum_node),
+    start_col: start_col(enum_node),
+    end_line: end_line(enum_node),
+    end_col: end_col(enum_node),
+  })
+
+  // Extract enum members
+  body_matches := query("(enum_body) @body", enum_node)
+  if len(body_matches) > 0 {
+    body := body_matches[0]["body"]
+    bc := int(body.NamedChildCount())
+    for i := 0; i < bc; i++ {
+      member := body.NamedChild(i)
+      // enum_assignment has property_identifier as first child
+      if member.Type() == "enum_assignment" {
+        variant_name := ""
+        pc := int(member.NamedChildCount())
+        for j := 0; j < pc; j++ {
+          ch := member.NamedChild(j)
+          if ch.Type() == "property_identifier" {
+            variant_name = node_text(ch)
+            break
+          }
+        }
+        if variant_name != "" {
+          insert_type_member({
+            symbol_id: sym_id,
+            name: variant_name,
+            kind: "variant",
+            type_expr: "",
+            visibility: "public",
+          })
+        }
+      } else if member.Type() == "property_identifier" {
+        // Simple enum member without assignment
+        insert_type_member({
+          symbol_id: sym_id,
+          name: node_text(member),
+          kind: "variant",
+          type_expr: "",
+          visibility: "public",
+        })
+      }
+    }
+  }
+}
+
+// --- Namespace/module declarations ---
+ns_matches := query("(expression_statement (internal_module name: (identifier) @name) @ns)", root)
+for _, m := range ns_matches {
+  name_node := m["name"]
+  ns_node := m["ns"]
+  name := node_text(name_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "namespace",
+    visibility: "public",
+    start_line: start_line(ns_node),
+    start_col: start_col(ns_node),
+    end_line: end_line(ns_node),
+    end_col: end_col(ns_node),
+  })
+}
+
+// --- Variable and constant declarations ---
+// var declarations
+var_matches := query("(variable_declaration (variable_declarator name: (identifier) @name) @decl) @stmt", root)
+for _, m := range var_matches {
+  name_node := m["name"]
+  stmt_node := m["stmt"]
+  name := node_text(name_node)
+
+  vis := "private"
+  parent := stmt_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "variable",
+    visibility: vis,
+    start_line: start_line(stmt_node),
+    start_col: start_col(stmt_node),
+    end_line: end_line(stmt_node),
+    end_col: end_col(stmt_node),
+  })
+}
+
+// let/const declarations (lexical_declaration)
+lex_matches := query("(lexical_declaration (variable_declarator name: (identifier) @name) @decl) @stmt", root)
+for _, m := range lex_matches {
+  name_node := m["name"]
+  stmt_node := m["stmt"]
+  decl_node := m["decl"]
+  name := node_text(name_node)
+
+  // Determine if const or let by looking at the first token of stmt_node
+  raw := node_text(stmt_node)
+  kind := "variable"
+  if strings.has_prefix(raw, "const ") {
+    kind = "constant"
+  }
+
+  vis := "private"
+  parent := stmt_node.Parent()
+  if parent != nil && parent.Type() == "export_statement" {
+    vis = "public"
+  }
+
+  // Check if the value is an arrow function — if so, treat it as a function
+  val_node := node_child(decl_node, "value")
+  if val_node != nil && val_node.Type() == "arrow_function" {
+    sym_id := insert_symbol({
+      file_id: file_id,
+      name: name,
+      kind: "function",
+      visibility: vis,
+      start_line: start_line(stmt_node),
+      start_col: start_col(stmt_node),
+      end_line: end_line(stmt_node),
+      end_col: end_col(stmt_node),
+    })
+
+    // Extract arrow function parameters
+    af_params := node_child(val_node, "parameters")
+    if af_params != nil {
+      extract_ts_params(sym_id, af_params)
+    }
+
+    // Extract return type from arrow function
+    extract_return_type(sym_id, val_node)
+
+    // Extract type parameters from arrow function
+    extract_type_params(sym_id, val_node)
+  } else {
+    insert_symbol({
+      file_id: file_id,
+      name: name,
+      kind: kind,
+      visibility: vis,
+      start_line: start_line(stmt_node),
+      start_col: start_col(stmt_node),
+      end_line: end_line(stmt_node),
+      end_col: end_col(stmt_node),
+    })
+  }
+}
+
+// --- Export statements (re-exports and named exports without declarations) ---
+export_matches := query("(export_statement) @export", root)
+for _, m := range export_matches {
+  export_node := m["export"]
+
+  // Check for re-exports: export { foo } from './module'
+  clause_matches := query("(export_statement (export_clause) @clause)", export_node)
+  if len(clause_matches) > 0 {
+    // Check if there's a source (re-export)
+    src_matches := query("(export_statement (string (string_fragment) @src))", export_node)
+    if len(src_matches) > 0 {
+      source := node_text(src_matches[0]["src"])
+      spec_matches := query("(export_clause (export_specifier) @spec)", export_node)
+      for _, sm := range spec_matches {
+        spec := sm["spec"]
+        sc := int(spec.NamedChildCount())
+        if sc > 0 {
+          exported_name := node_text(spec.NamedChild(0))
+          insert_import({
+            file_id: file_id,
+            source: source,
+            imported_name: exported_name,
+            kind: "reexport",
+            scope: "file",
+          })
+        }
+      }
+    }
+    // Named exports without source (export { bar, baz }) — these reference
+    // local symbols, not imports.
+  }
+}
+
+// --- Scope tree ---
+file_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "file",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Function scopes
+fn_scope_queries := [
+  "(function_declaration) @fn",
+]
+for _, fsq := range fn_scope_queries {
+  fn_scope_matches := query(fsq, root)
+  for _, m := range fn_scope_matches {
+    fn_node := m["fn"]
+    fn_nn := node_child(fn_node, "name")
+    fn_sym_id := nil
+    if fn_nn != nil {
+      fn_sym_id = find_symbol_id(node_text(fn_nn))
+    }
+    scope_map := {
+      file_id: file_id,
+      kind: "function",
+      start_line: start_line(fn_node),
+      start_col: start_col(fn_node),
+      end_line: end_line(fn_node),
+      end_col: end_col(fn_node),
+      parent_scope_id: file_scope_id,
+    }
+    if fn_sym_id != nil {
+      scope_map["symbol_id"] = fn_sym_id
+    }
+    fn_scope_id := insert_scope(scope_map)
+    body_node := node_child(fn_node, "body")
+    if body_node != nil {
+      extract_block_scopes(body_node, fn_scope_id)
+    }
+  }
+}
+
+// Class scopes
+class_scope_queries := [
+  "(class_declaration) @cls",
+  "(abstract_class_declaration) @cls",
+]
+for _, csq := range class_scope_queries {
+  cls_scope_matches := query(csq, root)
+  for _, m := range cls_scope_matches {
+    cls_node := m["cls"]
+    cls_nn := node_child(cls_node, "name")
+    cls_sym_id := nil
+    if cls_nn != nil {
+      cls_sym_id = find_symbol_id(node_text(cls_nn))
+    }
+    scope_map := {
+      file_id: file_id,
+      kind: "class",
+      start_line: start_line(cls_node),
+      start_col: start_col(cls_node),
+      end_line: end_line(cls_node),
+      end_col: end_col(cls_node),
+      parent_scope_id: file_scope_id,
+    }
+    if cls_sym_id != nil {
+      scope_map["symbol_id"] = cls_sym_id
+    }
+    insert_scope(scope_map)
+  }
+}
+
+// --- References ---
+
+// Simple function calls: foo()
+call_matches := query("(call_expression function: (identifier) @name) @call", root)
+for _, m := range call_matches {
+  name_node := m["name"]
+  // Skip require() calls — those are import patterns
+  if node_text(name_node) == "require" {
+    continue
+  }
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Method calls: obj.method()
+sel_call_matches := query("(call_expression function: (member_expression object: (identifier) @obj property: (property_identifier) @prop))", root)
+for _, m := range sel_call_matches {
+  obj_node := m["obj"]
+  prop_node := m["prop"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(obj_node),
+    context: "call",
+    start_line: start_line(obj_node),
+    start_col: start_col(obj_node),
+    end_line: end_line(obj_node),
+    end_col: end_col(obj_node),
+  })
+  insert_reference({
+    file_id: file_id,
+    name: node_text(prop_node),
+    context: "field_access",
+    start_line: start_line(prop_node),
+    start_col: start_col(prop_node),
+    end_line: end_line(prop_node),
+    end_col: end_col(prop_node),
+  })
+}
+
+// Property access (non-call): obj.prop
+field_sel_matches := query("(member_expression object: (identifier) @obj property: (property_identifier) @prop) @sel", root)
+for _, m := range field_sel_matches {
+  sel_node := m["sel"]
+  parent := sel_node.Parent()
+  if parent != nil && parent.Type() == "call_expression" {
+    // Already handled above
+  } else {
+    prop_node := m["prop"]
+    insert_reference({
+      file_id: file_id,
+      name: node_text(prop_node),
+      context: "field_access",
+      start_line: start_line(prop_node),
+      start_col: start_col(prop_node),
+      end_line: end_line(prop_node),
+      end_col: end_col(prop_node),
+    })
+  }
+}
+
+// new expressions: new Foo()
+new_matches := query("(new_expression constructor: (identifier) @name)", root)
+for _, m := range new_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Type references in annotations (type_identifier not in declaration position)
+type_ref_matches := query("(type_identifier) @type_id", root)
+for _, m := range type_ref_matches {
+  tn := m["type_id"]
+  type_name := node_text(tn)
+
+  parent := tn.Parent()
+  is_decl := false
+  if parent != nil {
+    pt := parent.Type()
+    if pt == "class_declaration" || pt == "abstract_class_declaration" || pt == "interface_declaration" || pt == "type_alias_declaration" {
+      // Check if this is the name child of the declaration
+      p_name := node_child(parent, "name")
+      if p_name != nil && node_text(p_name) == type_name {
+        is_decl = true
+      }
+    } else if pt == "type_parameter" {
+      // Type parameter definition, not a reference
+      // Only the first type_identifier in a type_parameter is a declaration
+      first_ti := parent.NamedChild(0)
+      if first_ti != nil && node_text(first_ti) == type_name {
+        is_decl = true
+      }
+    }
+  }
+
+  if !is_decl {
+    insert_reference({
+      file_id: file_id,
+      name: type_name,
+      context: "type_annotation",
+      start_line: start_line(tn),
+      start_col: start_col(tn),
+      end_line: end_line(tn),
+      end_col: end_col(tn),
+    })
+  }
+}

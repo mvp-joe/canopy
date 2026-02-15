@@ -1,0 +1,960 @@
+// Rust language extraction script for Canopy.
+//
+// Globals:
+//   file_path  — path to the Rust source file
+//   file_id    — database ID of the file record
+//   parse      — parse(path, language) → Tree
+//   parse_src  — parse_src(source, language) → Tree (for tests)
+//   node_text  — node_text(node) → string
+//   node_child — node_child(node, field) → child node or nil (safe wrapper)
+//   query      — query(pattern, node) → [{capture_name: node, ...}, ...]
+//   insert_symbol, insert_scope, insert_reference, insert_import,
+//   insert_type_member, insert_function_param, insert_type_param
+//   symbols_by_name, symbols_by_file
+//   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
+
+import strings
+
+// ========== All function definitions first (Risor requires define-before-use) ==========
+
+func start_line(node) {
+  return int(node.StartPoint().Row) + 1
+}
+
+func start_col(node) {
+  return int(node.StartPoint().Column)
+}
+
+func end_line(node) {
+  return int(node.EndPoint().Row) + 1
+}
+
+func end_col(node) {
+  return int(node.EndPoint().Column)
+}
+
+func find_symbol_id(name) {
+  syms := symbols_by_file(file_id)
+  for _, s := range syms {
+    if s["name"] == name {
+      return s["id"]
+    }
+  }
+  return nil
+}
+
+// Extract visibility from a node that may have a visibility_modifier child.
+// Returns "public", "pub(crate)", "pub(super)", or "private".
+func extract_visibility(node) {
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    if child.Type() == "visibility_modifier" {
+      text := node_text(child)
+      if text == "pub" {
+        return "public"
+      }
+      // pub(crate), pub(super), etc. — return as-is
+      return text
+    }
+  }
+  return "private"
+}
+
+// Check if a function_item has function_modifiers containing a specific modifier.
+func has_modifier(node, modifier) {
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    if child.Type() == "function_modifiers" {
+      text := node_text(child)
+      if strings.contains(text, modifier) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
+// Extract parameters from a function's parameter list.
+func extract_params(sym_id, params_node) {
+  count := int(params_node.NamedChildCount())
+  ordinal := 0
+  for i := 0; i < count; i++ {
+    param := params_node.NamedChild(i)
+    param_type := param.Type()
+
+    if param_type == "self_parameter" {
+      // &self, &mut self, self, mut self
+      type_expr := node_text(param)
+      insert_function_param({
+        symbol_id: sym_id,
+        name: "self",
+        ordinal: ordinal,
+        type_expr: type_expr,
+        is_receiver: true,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    } else if param_type == "parameter" {
+      pattern := node_child(param, "pattern")
+      tn := node_child(param, "type")
+      param_name := ""
+      if pattern != nil {
+        param_name = node_text(pattern)
+      }
+      type_expr := ""
+      if tn != nil {
+        type_expr = node_text(tn)
+      }
+      insert_function_param({
+        symbol_id: sym_id,
+        name: param_name,
+        ordinal: ordinal,
+        type_expr: type_expr,
+        is_receiver: false,
+        is_return: false,
+      })
+      ordinal = ordinal + 1
+    }
+  }
+}
+
+// Extract return type as a function_param with is_return=true.
+func extract_return_type(sym_id, fn_node) {
+  ret := node_child(fn_node, "return_type")
+  if ret != nil {
+    insert_function_param({
+      symbol_id: sym_id,
+      name: "",
+      ordinal: 0,
+      type_expr: node_text(ret),
+      is_receiver: false,
+      is_return: true,
+    })
+  }
+}
+
+// Extract type parameters from a function or type declaration.
+// Rust uses type_parameters with constrained_type_parameter or type_identifier children.
+func extract_type_params(sym_id, container_node) {
+  tp_node := node_child(container_node, "type_parameters")
+  if tp_node == nil {
+    return nil
+  }
+
+  ordinal := 0
+  count := int(tp_node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := tp_node.NamedChild(i)
+    child_type := child.Type()
+
+    if child_type == "constrained_type_parameter" {
+      // e.g., T: Clone + Send
+      tp_nn := node_child(child, "type")
+      // For constrained_type_parameter, the first child is the type_identifier name
+      tp_name := ""
+      if tp_nn != nil {
+        tp_name = node_text(tp_nn)
+      } else {
+        // Fallback: first named child should be the type_identifier
+        first := child.NamedChild(0)
+        if first != nil {
+          tp_name = node_text(first)
+        }
+      }
+
+      // Extract bounds — trait_bounds text includes leading ": ", strip it
+      constraint := ""
+      bounds_matches := query("(trait_bounds) @bounds", child)
+      for _, bm := range bounds_matches {
+        raw := node_text(bm["bounds"])
+        if strings.has_prefix(raw, ": ") {
+          constraint = raw[2:]
+        } else if strings.has_prefix(raw, ":") {
+          constraint = raw[1:]
+        } else {
+          constraint = raw
+        }
+      }
+
+      if tp_name != "" {
+        insert_type_param({
+          symbol_id: sym_id,
+          name: tp_name,
+          ordinal: ordinal,
+          param_kind: "type",
+          constraints: constraint,
+        })
+        ordinal = ordinal + 1
+      }
+    } else if child_type == "type_identifier" {
+      // Unconstrained type param, e.g., T
+      insert_type_param({
+        symbol_id: sym_id,
+        name: node_text(child),
+        ordinal: ordinal,
+        param_kind: "type",
+        constraints: "",
+      })
+      ordinal = ordinal + 1
+    } else if child_type == "lifetime" {
+      insert_type_param({
+        symbol_id: sym_id,
+        name: node_text(child),
+        ordinal: ordinal,
+        param_kind: "lifetime",
+        constraints: "",
+      })
+      ordinal = ordinal + 1
+    }
+  }
+}
+
+// Recursively extract use path as a string from a scoped_identifier.
+func use_path_string(node) {
+  t := node.Type()
+  if t == "scoped_identifier" || t == "scoped_type_identifier" {
+    path := node_child(node, "path")
+    name := node_child(node, "name")
+    path_str := ""
+    if path != nil {
+      path_str = use_path_string(path)
+    }
+    name_str := ""
+    if name != nil {
+      name_str = node_text(name)
+    }
+    if path_str != "" {
+      return path_str + "::" + name_str
+    }
+    return name_str
+  } else if t == "identifier" || t == "self" || t == "crate" || t == "super" {
+    return node_text(node)
+  }
+  return node_text(node)
+}
+
+// Process use declarations (recursive for nested scoped_use_list).
+func process_use_tree(node, prefix) {
+  t := node.Type()
+
+  if t == "scoped_identifier" {
+    // e.g., std::collections::HashMap
+    full_path := use_path_string(node)
+    parts := strings.split(full_path, "::")
+    imported_name := parts[len(parts)-1]
+    insert_import({
+      file_id: file_id,
+      source: full_path,
+      imported_name: imported_name,
+      kind: "module",
+      scope: "file",
+    })
+  } else if t == "identifier" {
+    // Simple identifier, possibly with prefix
+    name := node_text(node)
+    source := name
+    if prefix != "" {
+      source = prefix + "::" + name
+    }
+    insert_import({
+      file_id: file_id,
+      source: source,
+      imported_name: name,
+      kind: "module",
+      scope: "file",
+    })
+  } else if t == "scoped_use_list" {
+    // e.g., std::io::{self, Read}
+    path := node_child(node, "path")
+    list := node_child(node, "list")
+    path_str := ""
+    if path != nil {
+      path_str = use_path_string(path)
+    }
+    if list != nil {
+      count := int(list.NamedChildCount())
+      for i := 0; i < count; i++ {
+        child := list.NamedChild(i)
+        child_type := child.Type()
+        if child_type == "self" {
+          // use std::io::{self} -> imports std::io as io
+          parts := strings.split(path_str, "::")
+          imported_name := parts[len(parts)-1]
+          insert_import({
+            file_id: file_id,
+            source: path_str,
+            imported_name: imported_name,
+            kind: "module",
+            scope: "file",
+          })
+        } else if child_type == "identifier" {
+          name := node_text(child)
+          source := path_str + "::" + name
+          insert_import({
+            file_id: file_id,
+            source: source,
+            imported_name: name,
+            kind: "module",
+            scope: "file",
+          })
+        } else if child_type == "scoped_identifier" || child_type == "scoped_use_list" {
+          process_use_tree(child, path_str)
+        } else if child_type == "use_wildcard" {
+          // use std::io::*
+          insert_import({
+            file_id: file_id,
+            source: path_str + "::*",
+            imported_name: "*",
+            kind: "wildcard",
+            scope: "file",
+          })
+        }
+      }
+    }
+  } else if t == "use_wildcard" {
+    source := "*"
+    if prefix != "" {
+      source = prefix + "::*"
+    }
+    insert_import({
+      file_id: file_id,
+      source: source,
+      imported_name: "*",
+      kind: "wildcard",
+      scope: "file",
+    })
+  }
+}
+
+// Extract a function_item or function_signature_item as a symbol.
+// Returns the symbol ID.
+func extract_function(fn_node, parent_sym_id) {
+  name_node := node_child(fn_node, "name")
+  if name_node == nil {
+    return nil
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(fn_node)
+  fn_type := fn_node.Type()
+
+  kind := "function"
+  if fn_type == "function_signature_item" {
+    kind = "function"
+  }
+
+  // Check if this is a method (has self parameter)
+  params_node := node_child(fn_node, "parameters")
+  if params_node != nil {
+    pc := int(params_node.NamedChildCount())
+    for pi := 0; pi < pc; pi++ {
+      p := params_node.NamedChild(pi)
+      if p.Type() == "self_parameter" {
+        kind = "method"
+      }
+    }
+  }
+
+  sym_map := {
+    file_id: file_id,
+    name: name,
+    kind: kind,
+    visibility: vis,
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+  }
+  if parent_sym_id != nil {
+    sym_map["parent_symbol_id"] = parent_sym_id
+  }
+
+  sym_id := insert_symbol(sym_map)
+
+  // Extract parameters
+  if params_node != nil {
+    extract_params(sym_id, params_node)
+  }
+
+  // Extract return type
+  extract_return_type(sym_id, fn_node)
+
+  // Extract type parameters
+  extract_type_params(sym_id, fn_node)
+
+  return sym_id
+}
+
+// Extract block scopes (if, for, match, loop, while inside function bodies).
+func extract_block_scopes(node, parent_scope_id) {
+  block_types := ["if_expression", "for_expression", "while_expression",
+                   "loop_expression", "match_expression"]
+  count := int(node.NamedChildCount())
+  for i := 0; i < count; i++ {
+    child := node.NamedChild(i)
+    child_type := child.Type()
+
+    found := false
+    for _, bt := range block_types {
+      if child_type == bt {
+        found = true
+      }
+    }
+
+    if found {
+      block_scope_id := insert_scope({
+        file_id: file_id,
+        kind: "block",
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+        parent_scope_id: parent_scope_id,
+      })
+      extract_block_scopes(child, block_scope_id)
+    } else {
+      extract_block_scopes(child, parent_scope_id)
+    }
+  }
+}
+
+// ========== Extraction pipeline ==========
+
+tree := parse(file_path, "rust")
+root := tree.RootNode()
+
+// --- Use declarations (imports) ---
+use_matches := query("(use_declaration) @use", root)
+for _, m := range use_matches {
+  use_node := m["use"]
+  arg := node_child(use_node, "argument")
+  if arg != nil {
+    process_use_tree(arg, "")
+  }
+}
+
+// --- Struct declarations ---
+struct_matches := query("(struct_item) @st", root)
+for _, m := range struct_matches {
+  st_node := m["st"]
+  name_node := node_child(st_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(st_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "struct",
+    visibility: vis,
+    start_line: start_line(st_node),
+    start_col: start_col(st_node),
+    end_line: end_line(st_node),
+    end_col: end_col(st_node),
+  })
+
+  // Extract fields
+  body := node_child(st_node, "body")
+  if body != nil {
+    body_type := body.Type()
+    if body_type == "field_declaration_list" {
+      field_matches := query("(field_declaration) @field", body)
+      for _, fm := range field_matches {
+        field_node := fm["field"]
+        f_nn := node_child(field_node, "name")
+        f_tn := node_child(field_node, "type")
+        if f_nn != nil {
+          field_name := node_text(f_nn)
+          field_type := ""
+          if f_tn != nil {
+            field_type = node_text(f_tn)
+          }
+          field_vis := extract_visibility(field_node)
+          insert_type_member({
+            symbol_id: sym_id,
+            name: field_name,
+            kind: "field",
+            type_expr: field_type,
+            visibility: field_vis,
+          })
+        }
+      }
+    }
+    // ordered_field_declaration_list (tuple struct) — fields are unnamed types
+  }
+
+  // Extract type parameters
+  extract_type_params(sym_id, st_node)
+}
+
+// --- Enum declarations ---
+enum_matches := query("(enum_item) @en", root)
+for _, m := range enum_matches {
+  en_node := m["en"]
+  name_node := node_child(en_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(en_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "enum",
+    visibility: vis,
+    start_line: start_line(en_node),
+    start_col: start_col(en_node),
+    end_line: end_line(en_node),
+    end_col: end_col(en_node),
+  })
+
+  // Extract variants as type_members
+  body := node_child(en_node, "body")
+  if body != nil {
+    variant_matches := query("(enum_variant) @v", body)
+    for _, vm := range variant_matches {
+      v_node := vm["v"]
+      v_name_node := node_child(v_node, "name")
+      if v_name_node != nil {
+        insert_type_member({
+          symbol_id: sym_id,
+          name: node_text(v_name_node),
+          kind: "variant",
+          type_expr: "",
+          visibility: vis,
+        })
+      }
+    }
+  }
+
+  extract_type_params(sym_id, en_node)
+}
+
+// --- Trait declarations ---
+trait_matches := query("(trait_item) @tr", root)
+for _, m := range trait_matches {
+  tr_node := m["tr"]
+  name_node := node_child(tr_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(tr_node)
+
+  sym_id := insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "trait",
+    visibility: vis,
+    start_line: start_line(tr_node),
+    start_col: start_col(tr_node),
+    end_line: end_line(tr_node),
+    end_col: end_col(tr_node),
+  })
+
+  // Extract trait methods (function_signature_item and function_item)
+  body := node_child(tr_node, "body")
+  if body != nil {
+    sig_matches := query("(function_signature_item) @sig", body)
+    for _, sm := range sig_matches {
+      sig_node := sm["sig"]
+      sig_name := node_child(sig_node, "name")
+      if sig_name != nil {
+        insert_type_member({
+          symbol_id: sym_id,
+          name: node_text(sig_name),
+          kind: "method",
+          type_expr: node_text(sig_node),
+          visibility: vis,
+        })
+      }
+    }
+    // Also check for default method implementations (function_item in trait body)
+    fn_matches := query("(function_item) @fn", body)
+    for _, fm := range fn_matches {
+      fn_node := fm["fn"]
+      fn_name := node_child(fn_node, "name")
+      if fn_name != nil {
+        insert_type_member({
+          symbol_id: sym_id,
+          name: node_text(fn_name),
+          kind: "method",
+          type_expr: node_text(fn_node),
+          visibility: vis,
+        })
+      }
+    }
+  }
+
+  extract_type_params(sym_id, tr_node)
+}
+
+// --- Impl blocks ---
+// First pass: extract the impl type symbol link
+impl_matches := query("(impl_item) @impl", root)
+for _, m := range impl_matches {
+  impl_node := m["impl"]
+  type_node := node_child(impl_node, "type")
+  if type_node == nil {
+    continue
+  }
+  type_name := node_text(type_node)
+
+  // Find the parent symbol for this impl
+  parent_id := find_symbol_id(type_name)
+
+  // Extract methods from the impl block
+  body := node_child(impl_node, "body")
+  if body != nil {
+    fn_matches := query("(function_item) @fn", body)
+    for _, fm := range fn_matches {
+      fn_node := fm["fn"]
+      extract_function(fn_node, parent_id)
+    }
+  }
+}
+
+// --- Top-level function declarations (not inside impl/trait/mod) ---
+// Use direct children of root to avoid re-extracting impl/trait methods
+count := int(root.NamedChildCount())
+for i := 0; i < count; i++ {
+  child := root.NamedChild(i)
+  if child.Type() == "function_item" {
+    extract_function(child, nil)
+  }
+}
+
+// --- Module declarations ---
+mod_matches := query("(mod_item) @mod", root)
+for _, m := range mod_matches {
+  mod_node := m["mod"]
+  name_node := node_child(mod_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(mod_node)
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "module",
+    visibility: vis,
+    start_line: start_line(mod_node),
+    start_col: start_col(mod_node),
+    end_line: end_line(mod_node),
+    end_col: end_col(mod_node),
+  })
+
+  // Extract functions inside the module
+  body := node_child(mod_node, "body")
+  if body != nil {
+    fn_matches := query("(function_item) @fn", body)
+    for _, fm := range fn_matches {
+      fn_node := fm["fn"]
+      extract_function(fn_node, nil)
+    }
+  }
+}
+
+// --- Type aliases ---
+type_matches := query("(type_item) @ti", root)
+for _, m := range type_matches {
+  ti_node := m["ti"]
+  name_node := node_child(ti_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(ti_node)
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "type_alias",
+    visibility: vis,
+    start_line: start_line(ti_node),
+    start_col: start_col(ti_node),
+    end_line: end_line(ti_node),
+    end_col: end_col(ti_node),
+  })
+}
+
+// --- Constants ---
+const_matches := query("(const_item) @c", root)
+for _, m := range const_matches {
+  c_node := m["c"]
+  name_node := node_child(c_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(c_node)
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "constant",
+    visibility: vis,
+    start_line: start_line(c_node),
+    start_col: start_col(c_node),
+    end_line: end_line(c_node),
+    end_col: end_col(c_node),
+  })
+}
+
+// --- Statics ---
+static_matches := query("(static_item) @s", root)
+for _, m := range static_matches {
+  s_node := m["s"]
+  name_node := node_child(s_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+  vis := extract_visibility(s_node)
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "variable",
+    visibility: vis,
+    start_line: start_line(s_node),
+    start_col: start_col(s_node),
+    end_line: end_line(s_node),
+    end_col: end_col(s_node),
+  })
+}
+
+// --- Macro definitions ---
+macro_matches := query("(macro_definition) @mac", root)
+for _, m := range macro_matches {
+  mac_node := m["mac"]
+  name_node := node_child(mac_node, "name")
+  if name_node == nil {
+    continue
+  }
+  name := node_text(name_node)
+
+  insert_symbol({
+    file_id: file_id,
+    name: name,
+    kind: "function",
+    visibility: "public",
+    start_line: start_line(mac_node),
+    start_col: start_col(mac_node),
+    end_line: end_line(mac_node),
+    end_col: end_col(mac_node),
+  })
+}
+
+// --- Scope tree ---
+file_scope_id := insert_scope({
+  file_id: file_id,
+  kind: "file",
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+})
+
+// Function scopes (top-level only — direct children of root)
+for i := 0; i < int(root.NamedChildCount()); i++ {
+  child := root.NamedChild(i)
+  if child.Type() == "function_item" {
+    fn_nn := node_child(child, "name")
+    fn_sym_id := nil
+    if fn_nn != nil {
+      fn_sym_id = find_symbol_id(node_text(fn_nn))
+    }
+    scope_map := {
+      file_id: file_id,
+      kind: "function",
+      start_line: start_line(child),
+      start_col: start_col(child),
+      end_line: end_line(child),
+      end_col: end_col(child),
+      parent_scope_id: file_scope_id,
+    }
+    if fn_sym_id != nil {
+      scope_map["symbol_id"] = fn_sym_id
+    }
+    fn_scope_id := insert_scope(scope_map)
+    body_node := node_child(child, "body")
+    if body_node != nil {
+      extract_block_scopes(body_node, fn_scope_id)
+    }
+  }
+}
+
+// Impl block scopes
+for _, m := range impl_matches {
+  impl_node := m["impl"]
+  impl_scope_id := insert_scope({
+    file_id: file_id,
+    kind: "impl",
+    start_line: start_line(impl_node),
+    start_col: start_col(impl_node),
+    end_line: end_line(impl_node),
+    end_col: end_col(impl_node),
+    parent_scope_id: file_scope_id,
+  })
+
+  // Function scopes inside impl
+  body := node_child(impl_node, "body")
+  if body != nil {
+    fn_matches := query("(function_item) @fn", body)
+    for _, fm := range fn_matches {
+      fn_node := fm["fn"]
+      fn_nn := node_child(fn_node, "name")
+      fn_sym_id := nil
+      if fn_nn != nil {
+        fn_sym_id = find_symbol_id(node_text(fn_nn))
+      }
+      scope_map := {
+        file_id: file_id,
+        kind: "function",
+        start_line: start_line(fn_node),
+        start_col: start_col(fn_node),
+        end_line: end_line(fn_node),
+        end_col: end_col(fn_node),
+        parent_scope_id: impl_scope_id,
+      }
+      if fn_sym_id != nil {
+        scope_map["symbol_id"] = fn_sym_id
+      }
+      fn_scope_id := insert_scope(scope_map)
+      fn_body := node_child(fn_node, "body")
+      if fn_body != nil {
+        extract_block_scopes(fn_body, fn_scope_id)
+      }
+    }
+  }
+}
+
+// Module scopes
+for _, m := range mod_matches {
+  mod_node := m["mod"]
+  mod_body := node_child(mod_node, "body")
+  if mod_body != nil {
+    insert_scope({
+      file_id: file_id,
+      kind: "module",
+      start_line: start_line(mod_node),
+      start_col: start_col(mod_node),
+      end_line: end_line(mod_node),
+      end_col: end_col(mod_node),
+      parent_scope_id: file_scope_id,
+    })
+  }
+}
+
+// --- References ---
+
+// Function calls: simple identifier calls
+call_matches := query("(call_expression function: (identifier) @name) @call", root)
+for _, m := range call_matches {
+  name_node := m["name"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(name_node),
+    context: "call",
+    start_line: start_line(name_node),
+    start_col: start_col(name_node),
+    end_line: end_line(name_node),
+    end_col: end_col(name_node),
+  })
+}
+
+// Method calls: obj.method()
+method_call_matches := query("(call_expression function: (field_expression value: (_) @obj field: (field_identifier) @field)) @call", root)
+for _, m := range method_call_matches {
+  field_node := m["field"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(field_node),
+    context: "call",
+    start_line: start_line(field_node),
+    start_col: start_col(field_node),
+    end_line: end_line(field_node),
+    end_col: end_col(field_node),
+  })
+}
+
+// Scoped calls: Type::method() or module::function()
+scoped_call_matches := query("(call_expression function: (scoped_identifier) @scoped)", root)
+for _, m := range scoped_call_matches {
+  scoped_node := m["scoped"]
+  name_node := node_child(scoped_node, "name")
+  if name_node != nil {
+    insert_reference({
+      file_id: file_id,
+      name: node_text(name_node),
+      context: "call",
+      start_line: start_line(name_node),
+      start_col: start_col(name_node),
+      end_line: end_line(name_node),
+      end_col: end_col(name_node),
+    })
+  }
+}
+
+// Field access (non-call): obj.field
+field_matches := query("(field_expression value: (_) @obj field: (field_identifier) @field) @fe", root)
+for _, m := range field_matches {
+  fe_node := m["fe"]
+  parent := fe_node.Parent()
+  // Skip if this field_expression is the function of a call_expression (already handled)
+  if parent != nil && parent.Type() == "call_expression" {
+    fn_child := node_child(parent, "function")
+    if fn_child != nil && node_text(fn_child) == node_text(fe_node) {
+      continue
+    }
+  }
+  field_node := m["field"]
+  insert_reference({
+    file_id: file_id,
+    name: node_text(field_node),
+    context: "field_access",
+    start_line: start_line(field_node),
+    start_col: start_col(field_node),
+    end_line: end_line(field_node),
+    end_col: end_col(field_node),
+  })
+}
+
+// Type references (type_identifier not in declaration position)
+type_ref_matches := query("(type_identifier) @type_id", root)
+for _, m := range type_ref_matches {
+  tn := m["type_id"]
+  type_name := node_text(tn)
+
+  // Skip declaration positions
+  parent := tn.Parent()
+  is_decl := false
+  if parent != nil {
+    pt := parent.Type()
+    if pt == "struct_item" || pt == "enum_item" || pt == "trait_item" || pt == "type_item" {
+      p_name := node_child(parent, "name")
+      if p_name != nil && node_text(p_name) == type_name {
+        is_decl = true
+      }
+    }
+  }
+
+  if !is_decl {
+    insert_reference({
+      file_id: file_id,
+      name: type_name,
+      context: "type_annotation",
+      start_line: start_line(tn),
+      start_col: start_col(tn),
+      end_line: end_line(tn),
+      end_col: end_col(tn),
+    })
+  }
+}
