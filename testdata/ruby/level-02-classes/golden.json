@@ -1,0 +1,48 @@
+{
+  "definitions": [
+    {
+      "name": "Shapes",
+      "kind": "module",
+      "file": "types.rb",
+      "line": 1
+    },
+    {
+      "name": "Shape",
+      "kind": "class",
+      "file": "types.rb",
+      "line": 2
+    },
+    {
+      "name": "initialize",
+      "kind": "method",
+      "file": "types.rb",
+      "line": 3
+    },
+    {
+      "name": "describe",
+      "kind": "method",
+      "file": "types.rb",
+      "line": 7
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "file": "types.rb",
+      "line": 12
+    },
+    {
+      "name": "initialize",
+      "kind": "method",
+      "file": "types.rb",
+      "line": 13
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "file": "types.rb",
+      "line": 18
+    }
+  ],
+  "references": [],
+  "calls": []
+}

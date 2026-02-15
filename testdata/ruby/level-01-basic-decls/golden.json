@@ -1,0 +1,6 @@
+{
+  "definitions": [
+    { "name": "hello", "kind": "function", "file": "main.rb", "line": 5 },
+    { "name": "add", "kind": "function", "file": "main.rb", "line": 9 }
+  ]
+}

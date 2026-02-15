@@ -1,0 +1,7 @@
+{
+  "definitions": [
+    { "name": "MAX_RETRIES", "kind": "constant", "file": "main.php", "line": 3 },
+    { "name": "hello", "kind": "function", "file": "main.php", "line": 7 },
+    { "name": "add", "kind": "function", "file": "main.php", "line": 11 }
+  ]
+}

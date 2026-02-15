@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "MAX_RETRIES", "kind": "constant", "file": "main.rs", "line": 1 },
+    { "name": "DEBUG", "kind": "variable", "file": "main.rs", "line": 3 },
+    { "name": "hello", "kind": "function", "file": "main.rs", "line": 5 },
+    { "name": "add", "kind": "function", "file": "main.rs", "line": 9 },
+    { "name": "main", "kind": "function", "file": "main.rs", "line": 13 }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "Main", "kind": "class", "file": "Main.java", "line": 1 },
+    { "name": "main", "kind": "method", "file": "Main.java", "line": 2 },
+    { "name": "Util", "kind": "class", "file": "Util.java", "line": 1 },
+    { "name": "greet", "kind": "method", "file": "Util.java", "line": 2 },
+    { "name": "add", "kind": "method", "file": "Util.java", "line": 6 },
+    { "name": "isPositive", "kind": "method", "file": "Util.java", "line": 10 }
+  ]
+}

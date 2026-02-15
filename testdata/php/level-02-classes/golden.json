@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "Renderable", "kind": "interface", "file": "types.php", "line": 3 },
+    { "name": "render", "kind": "method", "file": "types.php", "line": 4 },
+    { "name": "Box", "kind": "class", "file": "types.php", "line": 7 },
+    { "name": "__construct", "kind": "method", "file": "types.php", "line": 10 },
+    { "name": "render", "kind": "method", "file": "types.php", "line": 14 },
+    { "name": "createBox", "kind": "function", "file": "types.php", "line": 19 }
+  ]
+}

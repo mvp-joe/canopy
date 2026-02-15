@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    {"name": "MAX_RETRIES", "kind": "variable", "file": "main.cpp", "line": 3},
+    {"name": "debug", "kind": "variable", "file": "main.cpp", "line": 5},
+    {"name": "hello", "kind": "function", "file": "main.cpp", "line": 7},
+    {"name": "add", "kind": "function", "file": "main.cpp", "line": 11},
+    {"name": "main", "kind": "function", "file": "main.cpp", "line": 15}
+  ],
+  "references": [],
+  "calls": []
+}

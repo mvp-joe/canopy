@@ -1,0 +1,21 @@
+{
+  "definitions": [
+    { "name": "greet", "kind": "function", "file": "util.php", "line": 3 },
+    { "name": "add", "kind": "function", "file": "util.php", "line": 7 },
+    { "name": "main", "kind": "function", "file": "main.php", "line": 5 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.php", "line": 6, "col": 11 },
+      "to": { "name": "greet", "file": "util.php", "line": 3 }
+    },
+    {
+      "from": { "file": "main.php", "line": 8, "col": 14 },
+      "to": { "name": "add", "file": "util.php", "line": 7 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "greet" },
+    { "caller": "main", "callee": "add" }
+  ]
+}

@@ -13,10 +13,10 @@ import (
 
 // Golden test format.
 type goldenFile struct {
-	Definitions     []goldenDef       `json:"definitions,omitempty"`
-	References      []goldenRef       `json:"references,omitempty"`
-	Implementations []goldenImpl      `json:"implementations,omitempty"`
-	Calls           []goldenCall      `json:"calls,omitempty"`
+	Definitions     []goldenDef  `json:"definitions,omitempty"`
+	References      []goldenRef  `json:"references,omitempty"`
+	Implementations []goldenImpl `json:"implementations,omitempty"`
+	Calls           []goldenCall `json:"calls,omitempty"`
 }
 
 type goldenDef struct {
@@ -53,36 +53,48 @@ type goldenCall struct {
 	Callee string `json:"callee"`
 }
 
-// TestGolden walks testdata/ directories and runs golden tests.
+// TestGolden walks testdata/{language}/ directories and runs golden tests
+// for all languages that have testdata.
 func TestGolden(t *testing.T) {
-	testdataRoot := filepath.Join("testdata", "go")
-	entries, err := os.ReadDir(testdataRoot)
+	langDirs, err := os.ReadDir("testdata")
 	if err != nil {
-		t.Skip("no testdata/go directory found")
+		t.Skip("no testdata directory found")
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
+	for _, langDir := range langDirs {
+		if !langDir.IsDir() {
 			continue
 		}
-		testDir := filepath.Join(testdataRoot, entry.Name())
-		goldenPath := filepath.Join(testDir, "golden.json")
-		srcDir := filepath.Join(testDir, "src")
-
-		if _, err := os.Stat(goldenPath); err != nil {
-			continue // No golden.json, skip
-		}
-		if _, err := os.Stat(srcDir); err != nil {
-			continue // No src/, skip
+		lang := langDir.Name()
+		langRoot := filepath.Join("testdata", lang)
+		levels, err := os.ReadDir(langRoot)
+		if err != nil {
+			continue
 		}
 
-		t.Run(entry.Name(), func(t *testing.T) {
-			runGoldenTest(t, srcDir, goldenPath)
-		})
+		for _, level := range levels {
+			if !level.IsDir() {
+				continue
+			}
+			testDir := filepath.Join(langRoot, level.Name())
+			goldenPath := filepath.Join(testDir, "golden.json")
+			srcDir := filepath.Join(testDir, "src")
+
+			if _, err := os.Stat(goldenPath); err != nil {
+				continue
+			}
+			if _, err := os.Stat(srcDir); err != nil {
+				continue
+			}
+
+			t.Run(lang+"/"+level.Name(), func(t *testing.T) {
+				runGoldenTest(t, lang, srcDir, goldenPath)
+			})
+		}
 	}
 }
 
-func runGoldenTest(t *testing.T, srcDir, goldenPath string) {
+func runGoldenTest(t *testing.T, lang, srcDir, goldenPath string) {
 	t.Helper()
 
 	// Read golden file.
@@ -101,16 +113,16 @@ func runGoldenTest(t *testing.T, srcDir, goldenPath string) {
 
 	// Create engine with temp DB.
 	dbPath := filepath.Join(t.TempDir(), "golden.db")
-	engine, err := New(dbPath, scriptsDir, WithLanguages("go"))
+	engine, err := New(dbPath, scriptsDir, WithLanguages(lang))
 	require.NoError(t, err)
 	defer engine.Close()
 
-	// Discover and index source files.
+	// Discover and index all source files in src/.
 	srcEntries, err := os.ReadDir(srcDir)
 	require.NoError(t, err)
 	var paths []string
 	for _, e := range srcEntries {
-		if !e.IsDir() && filepath.Ext(e.Name()) == ".go" {
+		if !e.IsDir() {
 			paths = append(paths, filepath.Join(srcDir, e.Name()))
 		}
 	}

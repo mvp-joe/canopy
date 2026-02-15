@@ -1,0 +1,21 @@
+{
+  "definitions": [
+    { "name": "main", "kind": "function", "file": "main.py", "line": 4 },
+    { "name": "greet", "kind": "function", "file": "util.py", "line": 1 },
+    { "name": "add", "kind": "function", "file": "util.py", "line": 5 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.py", "line": 5, "col": 10 },
+      "to": { "name": "greet", "file": "util.py", "line": 1 }
+    },
+    {
+      "from": { "file": "main.py", "line": 6, "col": 13 },
+      "to": { "name": "add", "file": "util.py", "line": 5 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "greet" },
+    { "caller": "main", "callee": "add" }
+  ]
+}

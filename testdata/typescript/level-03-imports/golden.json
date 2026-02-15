@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "main", "kind": "function", "file": "main.ts", "line": 3 },
+    { "name": "msg", "kind": "constant", "file": "main.ts", "line": 4 },
+    { "name": "sum", "kind": "constant", "file": "main.ts", "line": 5 },
+    { "name": "greet", "kind": "function", "file": "util.ts", "line": 1 },
+    { "name": "add", "kind": "function", "file": "util.ts", "line": 5 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.ts", "line": 4, "col": 14 },
+      "to": { "name": "greet", "file": "util.ts", "line": 1 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 5, "col": 14 },
+      "to": { "name": "add", "file": "util.ts", "line": 5 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "greet" },
+    { "caller": "main", "callee": "add" }
+  ]
+}

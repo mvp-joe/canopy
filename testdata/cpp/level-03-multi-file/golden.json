@@ -1,0 +1,18 @@
+{
+  "definitions": [
+    { "name": "main", "kind": "function", "file": "main.cpp", "line": 4 },
+    { "name": "util", "kind": "namespace", "file": "util.cpp", "line": 3 },
+    { "name": "clamp", "kind": "function", "file": "util.cpp", "line": 5 },
+    { "name": "repeat", "kind": "function", "file": "util.cpp", "line": 11 },
+    { "name": "util", "kind": "namespace", "file": "util.hpp", "line": 5 },
+    { "name": "clamp", "kind": "function", "file": "util.hpp", "line": 7 },
+    { "name": "repeat", "kind": "function", "file": "util.hpp", "line": 9 },
+    { "name": "Config", "kind": "struct", "file": "util.hpp", "line": 11 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.cpp", "line": 5, "col": 10 },
+      "to": { "name": "Config", "file": "util.hpp", "line": 11 }
+    }
+  ]
+}

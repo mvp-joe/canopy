@@ -1,0 +1,14 @@
+{
+  "definitions": [
+    { "name": "Main", "kind": "class", "file": "Main.java", "line": 1 },
+    {
+      "name": "MAX_RETRIES",
+      "kind": "constant",
+      "file": "Main.java",
+      "line": 2
+    },
+    { "name": "hello", "kind": "method", "file": "Main.java", "line": 6 },
+    { "name": "add", "kind": "method", "file": "Main.java", "line": 10 },
+    { "name": "main", "kind": "method", "file": "Main.java", "line": 14 }
+  ]
+}
