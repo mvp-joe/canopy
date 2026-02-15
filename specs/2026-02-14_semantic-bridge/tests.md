@@ -122,6 +122,8 @@
 
 ### QueryBuilder
 
+- `SymbolAt`: pre-populate symbols for a Go file; query a location inside a function declaration; verify returns the correct Symbol with ID, name, kind
+- `SymbolAt`: query a location with no symbol; verify returns nil/error
 - `DefinitionAt`: pre-populate extraction + resolution data for a Go file with function calls; query a call site location; verify returns the target function's location
 - `ReferencesTo`: insert a symbol and multiple resolved_references targeting it; query; verify all reference locations returned
 - `Implementations`: insert an interface symbol and implementation rows; query; verify implementing type locations returned

@@ -376,6 +376,7 @@ type Location struct {
     EndCol    int
 }
 
+func (q *QueryBuilder) SymbolAt(file string, line, col int) (*Symbol, error)
 func (q *QueryBuilder) DefinitionAt(file string, line, col int) ([]Location, error)
 func (q *QueryBuilder) ReferencesTo(symbolID int64) ([]Location, error)
 func (q *QueryBuilder) Implementations(symbolID int64) ([]Location, error)

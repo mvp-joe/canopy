@@ -7,7 +7,7 @@ import (
 	"github.com/jward/canopy/internal/store"
 )
 
-// QueryBuilder provides a cortex-facing query API over the Store.
+// QueryBuilder provides a query API over the Store.
 type QueryBuilder struct {
 	store *store.Store
 }
