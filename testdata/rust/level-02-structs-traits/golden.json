@@ -1,9 +1,9 @@
 {
   "definitions": [
-    { "name": "Config", "kind": "struct", "file": "types.rs", "line": 1 },
-    { "name": "Handler", "kind": "trait", "file": "types.rs", "line": 6 },
-    { "name": "handle", "kind": "method", "file": "types.rs", "line": 12 },
-    { "name": "reset", "kind": "method", "file": "types.rs", "line": 16 },
-    { "name": "new", "kind": "function", "file": "types.rs", "line": 22 }
+    { "name": "Config", "kind": "struct", "file": "types.rs", "line": 0 },
+    { "name": "Handler", "kind": "trait", "file": "types.rs", "line": 5 },
+    { "name": "handle", "kind": "method", "file": "types.rs", "line": 11 },
+    { "name": "reset", "kind": "method", "file": "types.rs", "line": 15 },
+    { "name": "new", "kind": "function", "file": "types.rs", "line": 21 }
   ]
 }

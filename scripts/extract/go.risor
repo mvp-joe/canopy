@@ -29,7 +29,7 @@ func visibility(name) {
 }
 
 func start_line(node) {
-  return int(node.StartPoint().Row) + 1
+  return int(node.StartPoint().Row)
 }
 
 func start_col(node) {
@@ -37,7 +37,7 @@ func start_col(node) {
 }
 
 func end_line(node) {
-  return int(node.EndPoint().Row) + 1
+  return int(node.EndPoint().Row)
 }
 
 func end_col(node) {

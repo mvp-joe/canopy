@@ -44,6 +44,7 @@ Source Files → Engine → tree-sitter Parse → Extraction Scripts → SQLite 
 - **Risor scripts get real Go objects** — tree-sitter Tree/Node and Store are passed directly, not wrapped. Host functions (`parse`, `node_text`, `query`) exist only where Risor's proxy system has limitations ([]byte args, free constructor functions, cursor iteration).
 - **smacker/go-tree-sitter** over official go-tree-sitter — official bindings have broken CGO includes as a Go module. Validated in `.spikes/risor-treesitter/`.
 - **go-sqlite3** over modernc.org/sqlite — CGO already required for tree-sitter, so CGO sqlite gives better performance.
+- **0-based line and column numbering** — All positions stored in SQLite and returned by QueryBuilder are 0-based, matching tree-sitter's native Row/Column convention. Consumers (e.g., project-cortex) should pass 0-based positions to query methods.
 
 ## Risor Language Reference
 

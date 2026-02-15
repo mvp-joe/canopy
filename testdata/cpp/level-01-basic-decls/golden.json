@@ -1,10 +1,10 @@
 {
   "definitions": [
-    {"name": "MAX_RETRIES", "kind": "variable", "file": "main.cpp", "line": 3},
-    {"name": "debug", "kind": "variable", "file": "main.cpp", "line": 5},
-    {"name": "hello", "kind": "function", "file": "main.cpp", "line": 7},
-    {"name": "add", "kind": "function", "file": "main.cpp", "line": 11},
-    {"name": "main", "kind": "function", "file": "main.cpp", "line": 15}
+    {"name": "MAX_RETRIES", "kind": "variable", "file": "main.cpp", "line": 2},
+    {"name": "debug", "kind": "variable", "file": "main.cpp", "line": 4},
+    {"name": "hello", "kind": "function", "file": "main.cpp", "line": 6},
+    {"name": "add", "kind": "function", "file": "main.cpp", "line": 10},
+    {"name": "main", "kind": "function", "file": "main.cpp", "line": 14}
   ],
   "references": [],
   "calls": []

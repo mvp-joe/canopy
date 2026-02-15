@@ -1,21 +1,21 @@
 {
   "definitions": [
-    { "name": "main", "kind": "package", "file": "main.go", "line": 1 },
-    { "name": "main", "kind": "function", "file": "main.go", "line": 3 },
-    { "name": "msg", "kind": "variable", "file": "main.go", "line": 4 },
-    { "name": "result", "kind": "variable", "file": "main.go", "line": 6 },
-    { "name": "main", "kind": "package", "file": "util.go", "line": 1 },
-    { "name": "Greet", "kind": "function", "file": "util.go", "line": 3 },
-    { "name": "Add", "kind": "function", "file": "util.go", "line": 7 }
+    { "name": "main", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "main", "kind": "function", "file": "main.go", "line": 2 },
+    { "name": "msg", "kind": "variable", "file": "main.go", "line": 3 },
+    { "name": "result", "kind": "variable", "file": "main.go", "line": 5 },
+    { "name": "main", "kind": "package", "file": "util.go", "line": 0 },
+    { "name": "Greet", "kind": "function", "file": "util.go", "line": 2 },
+    { "name": "Add", "kind": "function", "file": "util.go", "line": 6 }
   ],
   "references": [
     {
-      "from": { "file": "main.go", "line": 4, "col": 8 },
-      "to": { "name": "Greet", "file": "util.go", "line": 3 }
+      "from": { "file": "main.go", "line": 3, "col": 8 },
+      "to": { "name": "Greet", "file": "util.go", "line": 2 }
     },
     {
-      "from": { "file": "main.go", "line": 6, "col": 11 },
-      "to": { "name": "Add", "file": "util.go", "line": 7 }
+      "from": { "file": "main.go", "line": 5, "col": 11 },
+      "to": { "name": "Add", "file": "util.go", "line": 6 }
     }
   ],
   "calls": [

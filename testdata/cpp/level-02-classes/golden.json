@@ -1,7 +1,7 @@
 {
   "definitions": [
-    { "name": "Animal", "kind": "class", "file": "types.cpp", "line": 3 },
-    { "name": "Dog", "kind": "class", "file": "types.cpp", "line": 10 },
-    { "name": "Point", "kind": "struct", "file": "types.cpp", "line": 16 }
+    { "name": "Animal", "kind": "class", "file": "types.cpp", "line": 2 },
+    { "name": "Dog", "kind": "class", "file": "types.cpp", "line": 9 },
+    { "name": "Point", "kind": "struct", "file": "types.cpp", "line": 15 }
   ]
 }

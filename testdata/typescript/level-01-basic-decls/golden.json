@@ -1,9 +1,9 @@
 {
   "definitions": [
-    { "name": "MaxRetries", "kind": "constant", "file": "main.ts", "line": 1 },
-    { "name": "debug", "kind": "variable", "file": "main.ts", "line": 3 },
-    { "name": "hello", "kind": "function", "file": "main.ts", "line": 5 },
-    { "name": "add", "kind": "function", "file": "main.ts", "line": 9 },
-    { "name": "result", "kind": "constant", "file": "main.ts", "line": 13 }
+    { "name": "MaxRetries", "kind": "constant", "file": "main.ts", "line": 0 },
+    { "name": "debug", "kind": "variable", "file": "main.ts", "line": 2 },
+    { "name": "hello", "kind": "function", "file": "main.ts", "line": 4 },
+    { "name": "add", "kind": "function", "file": "main.ts", "line": 8 },
+    { "name": "result", "kind": "constant", "file": "main.ts", "line": 12 }
   ]
 }

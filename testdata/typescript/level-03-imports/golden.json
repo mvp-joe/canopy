@@ -1,19 +1,19 @@
 {
   "definitions": [
-    { "name": "main", "kind": "function", "file": "main.ts", "line": 3 },
-    { "name": "msg", "kind": "constant", "file": "main.ts", "line": 4 },
-    { "name": "sum", "kind": "constant", "file": "main.ts", "line": 5 },
-    { "name": "greet", "kind": "function", "file": "util.ts", "line": 1 },
-    { "name": "add", "kind": "function", "file": "util.ts", "line": 5 }
+    { "name": "main", "kind": "function", "file": "main.ts", "line": 2 },
+    { "name": "msg", "kind": "constant", "file": "main.ts", "line": 3 },
+    { "name": "sum", "kind": "constant", "file": "main.ts", "line": 4 },
+    { "name": "greet", "kind": "function", "file": "util.ts", "line": 0 },
+    { "name": "add", "kind": "function", "file": "util.ts", "line": 4 }
   ],
   "references": [
     {
-      "from": { "file": "main.ts", "line": 4, "col": 14 },
-      "to": { "name": "greet", "file": "util.ts", "line": 1 }
+      "from": { "file": "main.ts", "line": 3, "col": 14 },
+      "to": { "name": "greet", "file": "util.ts", "line": 0 }
     },
     {
-      "from": { "file": "main.ts", "line": 5, "col": 14 },
-      "to": { "name": "add", "file": "util.ts", "line": 5 }
+      "from": { "file": "main.ts", "line": 4, "col": 14 },
+      "to": { "name": "add", "file": "util.ts", "line": 4 }
     }
   ],
   "calls": [

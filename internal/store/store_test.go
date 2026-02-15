@@ -40,7 +40,7 @@ func insertTestSymbol(t *testing.T, s *Store, fileID *int64, name, kind string) 
 		Kind:       kind,
 		Visibility: "public",
 		Modifiers:  []string{"async"},
-		StartLine:  1, StartCol: 0, EndLine: 10, EndCol: 0,
+		StartLine:  0, StartCol: 0, EndLine: 9, EndCol: 0,
 	}
 	id, err := s.InsertSymbol(sym)
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestSymbol_InsertAndQueryByFile(t *testing.T) {
 	sym := &Symbol{
 		FileID: &f.ID, Name: "Foo", Kind: "function", Visibility: "public",
 		Modifiers: []string{"async", "static"}, SignatureHash: "hash1",
-		StartLine: 5, StartCol: 0, EndLine: 20, EndCol: 1,
+		StartLine: 4, StartCol: 0, EndLine: 19, EndCol: 1,
 	}
 	id, err := s.InsertSymbol(sym)
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func TestSymbol_InsertAndQueryByFile(t *testing.T) {
 	assert.Equal(t, "Foo", symbols[0].Name)
 	assert.Equal(t, "function", symbols[0].Kind)
 	assert.Equal(t, []string{"async", "static"}, symbols[0].Modifiers)
-	assert.Equal(t, 5, symbols[0].StartLine)
+	assert.Equal(t, 4, symbols[0].StartLine)
 }
 
 func TestSymbol_QueryByName(t *testing.T) {
@@ -198,7 +198,7 @@ func TestSymbol_Children(t *testing.T) {
 	child := &Symbol{
 		FileID: &f.ID, Name: "myMethod", Kind: "method",
 		ParentSymbolID: &parent.ID,
-		StartLine: 3, StartCol: 0, EndLine: 8, EndCol: 0,
+		StartLine:      2, StartCol: 0, EndLine: 7, EndCol: 0,
 	}
 	_, err := s.InsertSymbol(child)
 	require.NoError(t, err)
@@ -233,15 +233,15 @@ func TestScope_InsertAndQuery(t *testing.T) {
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
 
-	fileScope := &Scope{FileID: f.ID, Kind: "file", StartLine: 1, StartCol: 0, EndLine: 100, EndCol: 0}
+	fileScope := &Scope{FileID: f.ID, Kind: "file", StartLine: 0, StartCol: 0, EndLine: 99, EndCol: 0}
 	_, err := s.InsertScope(fileScope)
 	require.NoError(t, err)
 
-	funcScope := &Scope{FileID: f.ID, Kind: "function", StartLine: 5, StartCol: 0, EndLine: 20, EndCol: 0, ParentScopeID: &fileScope.ID}
+	funcScope := &Scope{FileID: f.ID, Kind: "function", StartLine: 4, StartCol: 0, EndLine: 19, EndCol: 0, ParentScopeID: &fileScope.ID}
 	_, err = s.InsertScope(funcScope)
 	require.NoError(t, err)
 
-	blockScope := &Scope{FileID: f.ID, Kind: "block", StartLine: 10, StartCol: 0, EndLine: 15, EndCol: 0, ParentScopeID: &funcScope.ID}
+	blockScope := &Scope{FileID: f.ID, Kind: "block", StartLine: 9, StartCol: 0, EndLine: 14, EndCol: 0, ParentScopeID: &funcScope.ID}
 	_, err = s.InsertScope(blockScope)
 	require.NoError(t, err)
 
@@ -255,15 +255,15 @@ func TestScope_Chain(t *testing.T) {
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
 
-	fileScope := &Scope{FileID: f.ID, Kind: "file", StartLine: 1, EndLine: 100}
+	fileScope := &Scope{FileID: f.ID, Kind: "file", StartLine: 0, EndLine: 99}
 	_, err := s.InsertScope(fileScope)
 	require.NoError(t, err)
 
-	funcScope := &Scope{FileID: f.ID, Kind: "function", StartLine: 5, EndLine: 20, ParentScopeID: &fileScope.ID}
+	funcScope := &Scope{FileID: f.ID, Kind: "function", StartLine: 4, EndLine: 19, ParentScopeID: &fileScope.ID}
 	_, err = s.InsertScope(funcScope)
 	require.NoError(t, err)
 
-	blockScope := &Scope{FileID: f.ID, Kind: "block", StartLine: 10, EndLine: 15, ParentScopeID: &funcScope.ID}
+	blockScope := &Scope{FileID: f.ID, Kind: "block", StartLine: 9, EndLine: 14, ParentScopeID: &funcScope.ID}
 	_, err = s.InsertScope(blockScope)
 	require.NoError(t, err)
 
@@ -283,13 +283,13 @@ func TestReference_InsertAndQuery(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
-	scope := &Scope{FileID: f.ID, Kind: "file", StartLine: 1, EndLine: 100}
+	scope := &Scope{FileID: f.ID, Kind: "file", StartLine: 0, EndLine: 99}
 	_, err := s.InsertScope(scope)
 	require.NoError(t, err)
 
 	ref := &Reference{
 		FileID: f.ID, ScopeID: &scope.ID, Name: "Bar",
-		StartLine: 10, StartCol: 5, EndLine: 10, EndCol: 8, Context: "call",
+		StartLine: 9, StartCol: 5, EndLine: 9, EndCol: 8, Context: "call",
 	}
 	id, err := s.InsertReference(ref)
 	require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestReference_InsertAndQuery(t *testing.T) {
 	require.Len(t, refs, 1)
 	assert.Equal(t, "Bar", refs[0].Name)
 	assert.Equal(t, "call", refs[0].Context)
-	assert.Equal(t, 10, refs[0].StartLine)
+	assert.Equal(t, 9, refs[0].StartLine)
 	assert.Equal(t, 5, refs[0].StartCol)
 }
 
@@ -308,8 +308,8 @@ func TestReference_ByName(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
-	s.InsertReference(&Reference{FileID: f.ID, Name: "Foo", StartLine: 1, EndLine: 1, Context: "call"})
-	s.InsertReference(&Reference{FileID: f.ID, Name: "Bar", StartLine: 2, EndLine: 2, Context: "type_annotation"})
+	s.InsertReference(&Reference{FileID: f.ID, Name: "Foo", StartLine: 0, EndLine: 0, Context: "call"})
+	s.InsertReference(&Reference{FileID: f.ID, Name: "Bar", StartLine: 1, EndLine: 1, Context: "type_annotation"})
 
 	refs, err := s.ReferencesByName("Foo")
 	require.NoError(t, err)
@@ -321,11 +321,11 @@ func TestReference_InScope(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
-	scope := &Scope{FileID: f.ID, Kind: "function", StartLine: 1, EndLine: 20}
+	scope := &Scope{FileID: f.ID, Kind: "function", StartLine: 0, EndLine: 19}
 	s.InsertScope(scope)
 
-	s.InsertReference(&Reference{FileID: f.ID, ScopeID: &scope.ID, Name: "x", StartLine: 5, EndLine: 5})
-	s.InsertReference(&Reference{FileID: f.ID, Name: "y", StartLine: 25, EndLine: 25}) // no scope
+	s.InsertReference(&Reference{FileID: f.ID, ScopeID: &scope.ID, Name: "x", StartLine: 4, EndLine: 4})
+	s.InsertReference(&Reference{FileID: f.ID, Name: "y", StartLine: 24, EndLine: 24}) // no scope
 
 	refs, err := s.ReferencesInScope(scope.ID)
 	require.NoError(t, err)
@@ -469,7 +469,7 @@ func TestAnnotation_InsertAndQuery(t *testing.T) {
 
 	ann := &Annotation{
 		TargetSymbolID: sym.ID, Name: "Deprecated",
-		Arguments: `{"since":"v2"}`, FileID: &f.ID, Line: 4, Col: 0,
+		Arguments: `{"since":"v2"}`, FileID: &f.ID, Line: 3, Col: 0,
 	}
 	id, err := s.InsertAnnotation(ann)
 	require.NoError(t, err)
@@ -494,8 +494,8 @@ func TestSymbolFragment_InsertAndQuery(t *testing.T) {
 	sym := insertTestSymbol(t, s, &f1.ID, "MyClass", "class")
 
 	frags := []*SymbolFragment{
-		{SymbolID: sym.ID, FileID: f1.ID, StartLine: 1, EndLine: 10, IsPrimary: true},
-		{SymbolID: sym.ID, FileID: f2.ID, StartLine: 1, EndLine: 50, IsPrimary: false},
+		{SymbolID: sym.ID, FileID: f1.ID, StartLine: 0, EndLine: 9, IsPrimary: true},
+		{SymbolID: sym.ID, FileID: f2.ID, StartLine: 0, EndLine: 49, IsPrimary: false},
 	}
 	for _, frag := range frags {
 		id, err := s.InsertSymbolFragment(frag)
@@ -530,7 +530,7 @@ func TestResolvedReference_InsertAndQuery(t *testing.T) {
 	s := newTestStore(t)
 	f := insertTestFile(t, s, "/main.go", "go")
 	sym := insertTestSymbol(t, s, &f.ID, "Bar", "function")
-	ref := &Reference{FileID: f.ID, Name: "Bar", StartLine: 10, EndLine: 10, Context: "call"}
+	ref := &Reference{FileID: f.ID, Name: "Bar", StartLine: 9, EndLine: 9, Context: "call"}
 	s.InsertReference(ref)
 
 	rr := &ResolvedReference{
@@ -587,7 +587,7 @@ func TestCallEdge_InsertAndQuery(t *testing.T) {
 
 	edge := &CallEdge{
 		CallerSymbolID: caller.ID, CalleeSymbolID: callee.ID,
-		FileID: &f.ID, Line: 15, Col: 3,
+		FileID: &f.ID, Line: 14, Col: 3,
 	}
 	id, err := s.InsertCallEdge(edge)
 	require.NoError(t, err)
@@ -680,21 +680,21 @@ func TestDeleteFileData(t *testing.T) {
 
 	// Populate extraction data.
 	sym := insertTestSymbol(t, s, &f.ID, "Foo", "function")
-	scope := &Scope{FileID: f.ID, Kind: "file", StartLine: 1, EndLine: 100}
+	scope := &Scope{FileID: f.ID, Kind: "file", StartLine: 0, EndLine: 99}
 	s.InsertScope(scope)
-	s.InsertReference(&Reference{FileID: f.ID, ScopeID: &scope.ID, Name: "Bar", StartLine: 10, EndLine: 10})
+	s.InsertReference(&Reference{FileID: f.ID, ScopeID: &scope.ID, Name: "Bar", StartLine: 9, EndLine: 9})
 	s.InsertImport(&Import{FileID: f.ID, Source: "fmt", Kind: "module", Scope: "file"})
 	s.InsertTypeMember(&TypeMember{SymbolID: sym.ID, Name: "X", Kind: "field", TypeExpr: "int"})
 	s.InsertFunctionParam(&FunctionParam{SymbolID: sym.ID, Name: "ctx", Ordinal: 0, TypeExpr: "context.Context"})
 	s.InsertTypeParam(&TypeParam{SymbolID: sym.ID, Name: "T", Ordinal: 0, ParamKind: "type"})
 	s.InsertAnnotation(&Annotation{TargetSymbolID: sym.ID, Name: "Test", FileID: &f.ID})
-	s.InsertSymbolFragment(&SymbolFragment{SymbolID: sym.ID, FileID: f.ID, StartLine: 1, EndLine: 10, IsPrimary: true})
+	s.InsertSymbolFragment(&SymbolFragment{SymbolID: sym.ID, FileID: f.ID, StartLine: 0, EndLine: 9, IsPrimary: true})
 
 	// Populate resolution data.
-	ref := &Reference{FileID: f.ID, Name: "Baz", StartLine: 15, EndLine: 15}
+	ref := &Reference{FileID: f.ID, Name: "Baz", StartLine: 14, EndLine: 14}
 	s.InsertReference(ref)
 	s.InsertResolvedReference(&ResolvedReference{ReferenceID: ref.ID, TargetSymbolID: sym.ID, Confidence: 1.0, ResolutionKind: "direct"})
-	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 15})
+	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 14})
 	s.InsertImplementation(&Implementation{TypeSymbolID: sym.ID, InterfaceSymbolID: sym.ID, Kind: "implicit", FileID: &f.ID})
 	s.InsertReexport(&Reexport{FileID: f.ID, OriginalSymbolID: sym.ID, ExportedName: "Foo"})
 
@@ -811,12 +811,12 @@ func TestFilesReferencingSymbols(t *testing.T) {
 	symC := insertTestSymbol(t, s, &fC.ID, "Helper", "function")
 
 	fA := insertTestFile(t, s, "/a.go", "go")
-	refA := &Reference{FileID: fA.ID, Name: "Helper", StartLine: 5, EndLine: 5, Context: "call"}
+	refA := &Reference{FileID: fA.ID, Name: "Helper", StartLine: 4, EndLine: 4, Context: "call"}
 	s.InsertReference(refA)
 	s.InsertResolvedReference(&ResolvedReference{ReferenceID: refA.ID, TargetSymbolID: symC.ID, Confidence: 1.0, ResolutionKind: "direct"})
 
 	fB := insertTestFile(t, s, "/b.go", "go")
-	refB := &Reference{FileID: fB.ID, Name: "Helper", StartLine: 8, EndLine: 8, Context: "call"}
+	refB := &Reference{FileID: fB.ID, Name: "Helper", StartLine: 7, EndLine: 7, Context: "call"}
 	s.InsertReference(refB)
 	s.InsertResolvedReference(&ResolvedReference{ReferenceID: refB.ID, TargetSymbolID: symC.ID, Confidence: 1.0, ResolutionKind: "direct"})
 
@@ -858,10 +858,10 @@ func TestDeleteResolutionDataForSymbols(t *testing.T) {
 	sym := insertTestSymbol(t, s, &f.ID, "Target", "function")
 
 	// Create resolution data targeting sym.
-	ref := &Reference{FileID: f.ID, Name: "Target", StartLine: 10, EndLine: 10}
+	ref := &Reference{FileID: f.ID, Name: "Target", StartLine: 9, EndLine: 9}
 	s.InsertReference(ref)
 	s.InsertResolvedReference(&ResolvedReference{ReferenceID: ref.ID, TargetSymbolID: sym.ID, Confidence: 1.0})
-	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 10})
+	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 9})
 	s.InsertImplementation(&Implementation{TypeSymbolID: sym.ID, InterfaceSymbolID: sym.ID, Kind: "implicit", FileID: &f.ID})
 
 	err := s.DeleteResolutionDataForSymbols([]int64{sym.ID})
@@ -883,10 +883,10 @@ func TestDeleteResolutionDataForFiles(t *testing.T) {
 	f := insertTestFile(t, s, "/main.go", "go")
 	sym := insertTestSymbol(t, s, &f.ID, "Foo", "function")
 
-	ref := &Reference{FileID: f.ID, Name: "Bar", StartLine: 10, EndLine: 10}
+	ref := &Reference{FileID: f.ID, Name: "Bar", StartLine: 9, EndLine: 9}
 	s.InsertReference(ref)
 	s.InsertResolvedReference(&ResolvedReference{ReferenceID: ref.ID, TargetSymbolID: sym.ID, Confidence: 1.0})
-	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 10})
+	s.InsertCallEdge(&CallEdge{CallerSymbolID: sym.ID, CalleeSymbolID: sym.ID, FileID: &f.ID, Line: 9})
 	s.InsertReexport(&Reexport{FileID: f.ID, OriginalSymbolID: sym.ID, ExportedName: "Foo"})
 
 	err := s.DeleteResolutionDataForFiles([]int64{f.ID})

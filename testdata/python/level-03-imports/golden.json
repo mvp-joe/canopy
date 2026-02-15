@@ -1,17 +1,17 @@
 {
   "definitions": [
-    { "name": "main", "kind": "function", "file": "main.py", "line": 4 },
-    { "name": "greet", "kind": "function", "file": "util.py", "line": 1 },
-    { "name": "add", "kind": "function", "file": "util.py", "line": 5 }
+    { "name": "main", "kind": "function", "file": "main.py", "line": 3 },
+    { "name": "greet", "kind": "function", "file": "util.py", "line": 0 },
+    { "name": "add", "kind": "function", "file": "util.py", "line": 4 }
   ],
   "references": [
     {
-      "from": { "file": "main.py", "line": 5, "col": 10 },
-      "to": { "name": "greet", "file": "util.py", "line": 1 }
+      "from": { "file": "main.py", "line": 4, "col": 10 },
+      "to": { "name": "greet", "file": "util.py", "line": 0 }
     },
     {
-      "from": { "file": "main.py", "line": 6, "col": 13 },
-      "to": { "name": "add", "file": "util.py", "line": 5 }
+      "from": { "file": "main.py", "line": 5, "col": 13 },
+      "to": { "name": "add", "file": "util.py", "line": 4 }
     }
   ],
   "calls": [

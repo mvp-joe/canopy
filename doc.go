@@ -29,7 +29,7 @@
 //	err = e.Resolve(ctx)
 //
 //	q := e.Query()
-//	locs, err := q.DefinitionAt("main.go", 10, 5)
+//	locs, err := q.DefinitionAt("main.go", 9, 5) // line and col are 0-based
 //
 // # Query API
 //

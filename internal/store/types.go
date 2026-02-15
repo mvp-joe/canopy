@@ -20,10 +20,10 @@ type Symbol struct {
 	Visibility     string
 	Modifiers      []string
 	SignatureHash  string
-	StartLine      int
-	StartCol       int
-	EndLine        int
-	EndCol         int
+	StartLine      int // 0-based
+	StartCol       int // 0-based
+	EndLine        int // 0-based
+	EndCol         int // 0-based
 	ParentSymbolID *int64
 }
 

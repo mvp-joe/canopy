@@ -13,6 +13,7 @@ type QueryBuilder struct {
 }
 
 // Location represents a source code position range.
+// All line and column numbers are 0-based, matching the tree-sitter convention.
 type Location struct {
 	File      string
 	StartLine int
@@ -22,7 +23,8 @@ type Location struct {
 }
 
 // SymbolAt returns the most specific (narrowest) symbol whose range contains the
-// given file position. Returns nil with no error if no symbol exists at that location.
+// given file position. Line and col are 0-based (tree-sitter convention).
+// Returns nil with no error if no symbol exists at that location.
 func (q *QueryBuilder) SymbolAt(file string, line, col int) (*store.Symbol, error) {
 	f, err := q.store.FileByPath(file)
 	if err != nil {
@@ -56,8 +58,8 @@ func (q *QueryBuilder) SymbolAt(file string, line, col int) (*store.Symbol, erro
 }
 
 // DefinitionAt finds the definition(s) of the symbol referenced at the given position.
-// It looks up references at (file, line, col), resolves them, and returns
-// the target symbol locations.
+// Line and col are 0-based (tree-sitter convention). It looks up references at
+// (file, line, col), resolves them, and returns the target symbol locations.
 func (q *QueryBuilder) DefinitionAt(file string, line, col int) ([]Location, error) {
 	f, err := q.store.FileByPath(file)
 	if err != nil {

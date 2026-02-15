@@ -1,9 +1,9 @@
 {
   "definitions": [
-    { "name": "Point", "kind": "struct", "file": "types.c", "line": 4 },
-    { "name": "Point", "kind": "type_alias", "file": "types.c", "line": 9 },
-    { "name": "Color", "kind": "enum", "file": "types.c", "line": 11 },
-    { "name": "make_point", "kind": "function", "file": "types.c", "line": 17 },
-    { "name": "print_point", "kind": "function", "file": "types.c", "line": 24 }
+    { "name": "Point", "kind": "struct", "file": "types.c", "line": 3 },
+    { "name": "Point", "kind": "type_alias", "file": "types.c", "line": 8 },
+    { "name": "Color", "kind": "enum", "file": "types.c", "line": 10 },
+    { "name": "make_point", "kind": "function", "file": "types.c", "line": 16 },
+    { "name": "print_point", "kind": "function", "file": "types.c", "line": 23 }
   ]
 }

@@ -1,9 +1,9 @@
 {
   "definitions": [
-    { "name": "MAX_RETRIES", "kind": "variable", "file": "main.py", "line": 1 },
-    { "name": "debug", "kind": "variable", "file": "main.py", "line": 3 },
-    { "name": "hello", "kind": "function", "file": "main.py", "line": 5 },
-    { "name": "add", "kind": "function", "file": "main.py", "line": 8 },
-    { "name": "main", "kind": "function", "file": "main.py", "line": 11 }
+    { "name": "MAX_RETRIES", "kind": "variable", "file": "main.py", "line": 0 },
+    { "name": "debug", "kind": "variable", "file": "main.py", "line": 2 },
+    { "name": "hello", "kind": "function", "file": "main.py", "line": 4 },
+    { "name": "add", "kind": "function", "file": "main.py", "line": 7 },
+    { "name": "main", "kind": "function", "file": "main.py", "line": 10 }
   ]
 }

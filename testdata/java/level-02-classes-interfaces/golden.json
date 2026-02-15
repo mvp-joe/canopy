@@ -1,12 +1,12 @@
 {
   "definitions": [
-    { "name": "Greeter", "kind": "interface", "file": "Types.java", "line": 1 },
-    { "name": "greet", "kind": "method", "file": "Types.java", "line": 2 },
-    { "name": "reset", "kind": "method", "file": "Types.java", "line": 3 },
-    { "name": "SimpleGreeter", "kind": "class", "file": "Types.java", "line": 6 },
-    { "name": "SimpleGreeter", "kind": "constructor", "file": "Types.java", "line": 9 },
-    { "name": "greet", "kind": "method", "file": "Types.java", "line": 13 },
-    { "name": "reset", "kind": "method", "file": "Types.java", "line": 17 },
-    { "name": "create", "kind": "method", "file": "Types.java", "line": 21 }
+    { "name": "Greeter", "kind": "interface", "file": "Types.java", "line": 0 },
+    { "name": "greet", "kind": "method", "file": "Types.java", "line": 1 },
+    { "name": "reset", "kind": "method", "file": "Types.java", "line": 2 },
+    { "name": "SimpleGreeter", "kind": "class", "file": "Types.java", "line": 5 },
+    { "name": "SimpleGreeter", "kind": "constructor", "file": "Types.java", "line": 8 },
+    { "name": "greet", "kind": "method", "file": "Types.java", "line": 12 },
+    { "name": "reset", "kind": "method", "file": "Types.java", "line": 16 },
+    { "name": "create", "kind": "method", "file": "Types.java", "line": 20 }
   ]
 }

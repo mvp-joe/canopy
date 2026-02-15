@@ -57,7 +57,7 @@ func TestTS_FunctionDeclaration(t *testing.T) {
 	require.NotNil(t, fn, "expected function symbol")
 	assert.Equal(t, "greet", fn.Name)
 	assert.Equal(t, "function", fn.Kind)
-	assert.Equal(t, 1, fn.StartLine)
+	assert.Equal(t, 0, fn.StartLine)
 
 	// Check parameters
 	params, err := env.store.FunctionParams(fn.ID)

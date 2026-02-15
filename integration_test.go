@@ -56,7 +56,7 @@ func TestIntegration_FullPipeline_GoDefinition(t *testing.T) {
 	dir := t.TempDir()
 
 	// Write two Go files: a library and a consumer.
-	// Lines are 1-indexed, columns are 0-indexed in extraction output.
+	// Lines are 0-indexed, columns are 0-indexed in extraction output.
 	libPath := writeGoFile(t, dir, "lib.go", `package main
 
 func Helper() string {
@@ -77,15 +77,15 @@ func main() {
 	require.NoError(t, e.Resolve(ctx))
 
 	// Query: go-to-definition on "Helper()" call in main.go.
-	// The call `Helper()` is at line 4, col 1 (tab-indented).
+	// The call `Helper()` is at line 3, col 1 (tab-indented).
 	q := e.Query()
-	locs, err := q.DefinitionAt(mainPath, 4, 1)
+	locs, err := q.DefinitionAt(mainPath, 3, 1)
 	require.NoError(t, err)
 	require.NotEmpty(t, locs, "expected DefinitionAt to find Helper definition")
 
 	assert.Equal(t, libPath, locs[0].File)
-	// Helper is declared starting at line 3.
-	assert.Equal(t, 3, locs[0].StartLine)
+	// Helper is declared starting at line 2.
+	assert.Equal(t, 2, locs[0].StartLine)
 }
 
 // TestIntegration_FullPipeline_GoReferences tests:
@@ -126,14 +126,14 @@ func main() {
 	require.NoError(t, err)
 	require.NotEmpty(t, locs, "expected at least one reference to greet")
 
-	// The call reference should be on line 8 (1-indexed): `greet()`.
+	// The call reference should be on line 7 (0-indexed): `greet()`.
 	found := false
 	for _, loc := range locs {
-		if loc.File == path && loc.StartLine == 8 {
+		if loc.File == path && loc.StartLine == 7 {
 			found = true
 		}
 	}
-	assert.True(t, found, "expected a reference on the greet() call line (line 8)")
+	assert.True(t, found, "expected a reference on the greet() call line (line 7)")
 }
 
 // TestIntegration_FullPipeline_GoImplementations tests:

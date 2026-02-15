@@ -28,23 +28,23 @@ func TestSymbolAt_ReturnsCorrectSymbol(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Outer symbol: a struct spanning lines 1-20.
+	// Outer symbol: a struct spanning lines 0-19.
 	outerID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "MyStruct", Kind: "struct", Visibility: "public",
-		StartLine: 1, StartCol: 0, EndLine: 20, EndCol: 1,
+		StartLine: 0, StartCol: 0, EndLine: 19, EndCol: 1,
 	})
 	require.NoError(t, err)
 
-	// Inner symbol: a method inside the struct spanning lines 5-10.
+	// Inner symbol: a method inside the struct spanning lines 4-9.
 	innerID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "DoWork", Kind: "method", Visibility: "public",
-		StartLine: 5, StartCol: 1, EndLine: 10, EndCol: 1,
+		StartLine: 4, StartCol: 1, EndLine: 9, EndCol: 1,
 		ParentSymbolID: &outerID,
 	})
 	require.NoError(t, err)
 
 	// Query a position inside the inner symbol -- should return the narrowest match.
-	sym, err := q.SymbolAt("/test.go", 7, 5)
+	sym, err := q.SymbolAt("/test.go", 6, 5)
 	require.NoError(t, err)
 	require.NotNil(t, sym)
 	assert.Equal(t, innerID, sym.ID)
@@ -52,7 +52,7 @@ func TestSymbolAt_ReturnsCorrectSymbol(t *testing.T) {
 	assert.Equal(t, "method", sym.Kind)
 
 	// Query a position inside the outer symbol but outside the inner one.
-	sym, err = q.SymbolAt("/test.go", 15, 0)
+	sym, err = q.SymbolAt("/test.go", 14, 0)
 	require.NoError(t, err)
 	require.NotNil(t, sym)
 	assert.Equal(t, outerID, sym.ID)
@@ -69,7 +69,7 @@ func TestSymbolAt_NoSymbol(t *testing.T) {
 	require.NoError(t, err)
 
 	// File exists but no symbols at this location.
-	sym, err := q.SymbolAt("/test.go", 50, 0)
+	sym, err := q.SymbolAt("/test.go", 49, 0)
 	require.NoError(t, err)
 	assert.Nil(t, sym)
 }
@@ -78,7 +78,7 @@ func TestSymbolAt_NoFile(t *testing.T) {
 	q, _ := newTestQueryBuilder(t)
 
 	// File doesn't exist at all.
-	sym, err := q.SymbolAt("/nonexistent.go", 1, 0)
+	sym, err := q.SymbolAt("/nonexistent.go", 0, 0)
 	require.NoError(t, err)
 	assert.Nil(t, sym)
 }
@@ -86,7 +86,7 @@ func TestSymbolAt_NoFile(t *testing.T) {
 func TestDefinitionAt_NoFile(t *testing.T) {
 	q, _ := newTestQueryBuilder(t)
 
-	locs, err := q.DefinitionAt("/nonexistent.go", 1, 0)
+	locs, err := q.DefinitionAt("/nonexistent.go", 0, 0)
 	require.NoError(t, err)
 	assert.Empty(t, locs)
 }
@@ -102,13 +102,13 @@ func TestDefinitionAt_WithResolvedReference(t *testing.T) {
 
 	symID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "Foo", Kind: "function", Visibility: "public",
-		StartLine: 5, StartCol: 0, EndLine: 10, EndCol: 1,
+		StartLine: 4, StartCol: 0, EndLine: 9, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	refID, err := s.InsertReference(&store.Reference{
 		FileID: fID, Name: "Foo",
-		StartLine: 20, StartCol: 5, EndLine: 20, EndCol: 8,
+		StartLine: 19, StartCol: 5, EndLine: 19, EndCol: 8,
 		Context: "call",
 	})
 	require.NoError(t, err)
@@ -118,11 +118,11 @@ func TestDefinitionAt_WithResolvedReference(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	locs, err := q.DefinitionAt("/test.go", 20, 6)
+	locs, err := q.DefinitionAt("/test.go", 19, 6)
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
 	assert.Equal(t, "/test.go", locs[0].File)
-	assert.Equal(t, 5, locs[0].StartLine)
+	assert.Equal(t, 4, locs[0].StartLine)
 	assert.Equal(t, 0, locs[0].StartCol)
 }
 
@@ -136,13 +136,13 @@ func TestDefinitionAt_PositionOutsideReference(t *testing.T) {
 
 	_, err = s.InsertReference(&store.Reference{
 		FileID: fID, Name: "Foo",
-		StartLine: 20, StartCol: 5, EndLine: 20, EndCol: 8,
+		StartLine: 19, StartCol: 5, EndLine: 19, EndCol: 8,
 		Context: "call",
 	})
 	require.NoError(t, err)
 
 	// Position before the reference span.
-	locs, err := q.DefinitionAt("/test.go", 20, 2)
+	locs, err := q.DefinitionAt("/test.go", 19, 2)
 	require.NoError(t, err)
 	assert.Empty(t, locs)
 }
@@ -157,20 +157,20 @@ func TestReferencesTo(t *testing.T) {
 
 	symID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "Bar", Kind: "function", Visibility: "public",
-		StartLine: 1, StartCol: 0, EndLine: 5, EndCol: 1,
+		StartLine: 0, StartCol: 0, EndLine: 4, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	ref1ID, err := s.InsertReference(&store.Reference{
 		FileID: fID, Name: "Bar",
-		StartLine: 10, StartCol: 2, EndLine: 10, EndCol: 5,
+		StartLine: 9, StartCol: 2, EndLine: 9, EndCol: 5,
 		Context: "call",
 	})
 	require.NoError(t, err)
 
 	ref2ID, err := s.InsertReference(&store.Reference{
 		FileID: fID, Name: "Bar",
-		StartLine: 15, StartCol: 0, EndLine: 15, EndCol: 3,
+		StartLine: 14, StartCol: 0, EndLine: 14, EndCol: 3,
 		Context: "call",
 	})
 	require.NoError(t, err)
@@ -197,13 +197,13 @@ func TestImplementations(t *testing.T) {
 
 	ifaceID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "Reader", Kind: "interface", Visibility: "public",
-		StartLine: 1, StartCol: 0, EndLine: 5, EndCol: 1,
+		StartLine: 0, StartCol: 0, EndLine: 4, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	typeID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "MyReader", Kind: "struct", Visibility: "public",
-		StartLine: 10, StartCol: 0, EndLine: 15, EndCol: 1,
+		StartLine: 9, StartCol: 0, EndLine: 14, EndCol: 1,
 	})
 	require.NoError(t, err)
 
@@ -216,7 +216,7 @@ func TestImplementations(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, locs, 1)
 	assert.Equal(t, "/test.go", locs[0].File)
-	assert.Equal(t, 10, locs[0].StartLine)
+	assert.Equal(t, 9, locs[0].StartLine)
 }
 
 func TestCallers(t *testing.T) {
@@ -229,18 +229,18 @@ func TestCallers(t *testing.T) {
 
 	callerID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "main", Kind: "function",
-		StartLine: 1, StartCol: 0, EndLine: 10, EndCol: 1,
+		StartLine: 0, StartCol: 0, EndLine: 9, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	calleeID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "helper", Kind: "function",
-		StartLine: 12, StartCol: 0, EndLine: 20, EndCol: 1,
+		StartLine: 11, StartCol: 0, EndLine: 19, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	_, err = s.InsertCallEdge(&store.CallEdge{
-		CallerSymbolID: callerID, CalleeSymbolID: calleeID, FileID: &fID, Line: 5, Col: 2,
+		CallerSymbolID: callerID, CalleeSymbolID: calleeID, FileID: &fID, Line: 4, Col: 2,
 	})
 	require.NoError(t, err)
 
@@ -260,18 +260,18 @@ func TestCallees(t *testing.T) {
 
 	callerID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "main", Kind: "function",
-		StartLine: 1, StartCol: 0, EndLine: 10, EndCol: 1,
+		StartLine: 0, StartCol: 0, EndLine: 9, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	calleeID, err := s.InsertSymbol(&store.Symbol{
 		FileID: &fID, Name: "helper", Kind: "function",
-		StartLine: 12, StartCol: 0, EndLine: 20, EndCol: 1,
+		StartLine: 11, StartCol: 0, EndLine: 19, EndCol: 1,
 	})
 	require.NoError(t, err)
 
 	_, err = s.InsertCallEdge(&store.CallEdge{
-		CallerSymbolID: callerID, CalleeSymbolID: calleeID, FileID: &fID, Line: 5, Col: 2,
+		CallerSymbolID: callerID, CalleeSymbolID: calleeID, FileID: &fID, Line: 4, Col: 2,
 	})
 	require.NoError(t, err)
 

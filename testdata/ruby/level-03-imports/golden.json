@@ -1,21 +1,21 @@
 {
   "definitions": [
-    { "name": "Util", "kind": "module", "file": "util.rb", "line": 1 },
-    { "name": "greet", "kind": "method", "file": "util.rb", "line": 2 },
-    { "name": "add", "kind": "method", "file": "util.rb", "line": 6 }
+    { "name": "Util", "kind": "module", "file": "util.rb", "line": 0 },
+    { "name": "greet", "kind": "method", "file": "util.rb", "line": 1 },
+    { "name": "add", "kind": "method", "file": "util.rb", "line": 5 }
   ],
   "references": [
     {
-      "from": { "file": "main.rb", "line": 3, "col": 10 },
-      "to": { "name": "Util", "file": "util.rb", "line": 1 }
+      "from": { "file": "main.rb", "line": 2, "col": 10 },
+      "to": { "name": "Util", "file": "util.rb", "line": 0 }
     },
     {
-      "from": { "file": "main.rb", "line": 3, "col": 15 },
-      "to": { "name": "greet", "file": "util.rb", "line": 2 }
+      "from": { "file": "main.rb", "line": 2, "col": 15 },
+      "to": { "name": "greet", "file": "util.rb", "line": 1 }
     },
     {
-      "from": { "file": "main.rb", "line": 6, "col": 11 },
-      "to": { "name": "add", "file": "util.rb", "line": 6 }
+      "from": { "file": "main.rb", "line": 5, "col": 11 },
+      "to": { "name": "add", "file": "util.rb", "line": 5 }
     }
   ]
 }

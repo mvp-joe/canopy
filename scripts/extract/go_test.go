@@ -125,7 +125,7 @@ func Hello() {
 	assert.Equal(t, "Hello", fn.Name)
 	assert.Equal(t, "function", fn.Kind)
 	assert.Equal(t, "public", fn.Visibility)
-	assert.Equal(t, 3, fn.StartLine) // line 3
+	assert.Equal(t, 2, fn.StartLine) // line 3 (0-based)
 }
 
 func TestExtract_MultipleFunctions(t *testing.T) {

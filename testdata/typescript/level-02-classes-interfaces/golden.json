@@ -1,10 +1,10 @@
 {
   "definitions": [
-    { "name": "Handler", "kind": "interface", "file": "types.ts", "line": 1 },
-    { "name": "Server", "kind": "class", "file": "types.ts", "line": 6 },
-    { "name": "constructor", "kind": "method", "file": "types.ts", "line": 9 },
-    { "name": "handle", "kind": "method", "file": "types.ts", "line": 13 },
-    { "name": "close", "kind": "method", "file": "types.ts", "line": 17 },
-    { "name": "newServer", "kind": "function", "file": "types.ts", "line": 20 }
+    { "name": "Handler", "kind": "interface", "file": "types.ts", "line": 0 },
+    { "name": "Server", "kind": "class", "file": "types.ts", "line": 5 },
+    { "name": "constructor", "kind": "method", "file": "types.ts", "line": 8 },
+    { "name": "handle", "kind": "method", "file": "types.ts", "line": 12 },
+    { "name": "close", "kind": "method", "file": "types.ts", "line": 16 },
+    { "name": "newServer", "kind": "function", "file": "types.ts", "line": 19 }
   ]
 }

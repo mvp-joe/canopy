@@ -1,8 +1,8 @@
 {
   "definitions": [
-    { "name": "MAX_RETRIES", "kind": "constant", "file": "main.c", "line": 3 },
-    { "name": "debug", "kind": "variable", "file": "main.c", "line": 5 },
-    { "name": "add", "kind": "function", "file": "main.c", "line": 11 },
-    { "name": "main", "kind": "function", "file": "main.c", "line": 15 }
+    { "name": "MAX_RETRIES", "kind": "constant", "file": "main.c", "line": 2 },
+    { "name": "debug", "kind": "variable", "file": "main.c", "line": 4 },
+    { "name": "add", "kind": "function", "file": "main.c", "line": 10 },
+    { "name": "main", "kind": "function", "file": "main.c", "line": 14 }
   ]
 }

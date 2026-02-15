@@ -47,10 +47,10 @@ symbols (
   visibility      TEXT,
   modifiers       TEXT,            -- JSON: ["async","static","sealed","suspend","partial",...]
   signature_hash  TEXT,            -- composite hash: name+kind+visibility+modifiers+members+params
-  start_line      INTEGER,
-  start_col       INTEGER,
-  end_line        INTEGER,
-  end_col         INTEGER,
+  start_line      INTEGER,         -- 0-based (tree-sitter Row)
+  start_col       INTEGER,         -- 0-based (tree-sitter Column)
+  end_line        INTEGER,         -- 0-based (tree-sitter Row)
+  end_col         INTEGER,         -- 0-based (tree-sitter Column)
   parent_symbol_id INTEGER REFERENCES symbols(id)
 )
 ```

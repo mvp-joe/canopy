@@ -1,11 +1,11 @@
 {
   "definitions": [
-    { "name": "types", "kind": "package", "file": "types.go", "line": 1 },
-    { "name": "Config", "kind": "struct", "file": "types.go", "line": 3 },
-    { "name": "Handler", "kind": "interface", "file": "types.go", "line": 8 },
-    { "name": "Server", "kind": "struct", "file": "types.go", "line": 13 },
-    { "name": "Handle", "kind": "method", "file": "types.go", "line": 18 },
-    { "name": "Close", "kind": "method", "file": "types.go", "line": 22 },
-    { "name": "NewServer", "kind": "function", "file": "types.go", "line": 26 }
+    { "name": "types", "kind": "package", "file": "types.go", "line": 0 },
+    { "name": "Config", "kind": "struct", "file": "types.go", "line": 2 },
+    { "name": "Handler", "kind": "interface", "file": "types.go", "line": 7 },
+    { "name": "Server", "kind": "struct", "file": "types.go", "line": 12 },
+    { "name": "Handle", "kind": "method", "file": "types.go", "line": 17 },
+    { "name": "Close", "kind": "method", "file": "types.go", "line": 21 },
+    { "name": "NewServer", "kind": "function", "file": "types.go", "line": 25 }
   ]
 }

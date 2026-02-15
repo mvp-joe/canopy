@@ -1,17 +1,17 @@
 {
   "definitions": [
-    { "name": "greet", "kind": "function", "file": "util.php", "line": 3 },
-    { "name": "add", "kind": "function", "file": "util.php", "line": 7 },
-    { "name": "main", "kind": "function", "file": "main.php", "line": 5 }
+    { "name": "greet", "kind": "function", "file": "util.php", "line": 2 },
+    { "name": "add", "kind": "function", "file": "util.php", "line": 6 },
+    { "name": "main", "kind": "function", "file": "main.php", "line": 4 }
   ],
   "references": [
     {
-      "from": { "file": "main.php", "line": 6, "col": 11 },
-      "to": { "name": "greet", "file": "util.php", "line": 3 }
+      "from": { "file": "main.php", "line": 5, "col": 11 },
+      "to": { "name": "greet", "file": "util.php", "line": 2 }
     },
     {
-      "from": { "file": "main.php", "line": 8, "col": 14 },
-      "to": { "name": "add", "file": "util.php", "line": 7 }
+      "from": { "file": "main.php", "line": 7, "col": 14 },
+      "to": { "name": "add", "file": "util.php", "line": 6 }
     }
   ],
   "calls": [

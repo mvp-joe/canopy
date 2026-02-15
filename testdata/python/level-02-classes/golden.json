@@ -1,14 +1,14 @@
 {
   "definitions": [
-    { "name": "Config", "kind": "class", "file": "types.py", "line": 1 },
-    { "name": "__init__", "kind": "method", "file": "types.py", "line": 2 },
-    { "name": "Handler", "kind": "class", "file": "types.py", "line": 7 },
-    { "name": "handle", "kind": "method", "file": "types.py", "line": 8 },
-    { "name": "close", "kind": "method", "file": "types.py", "line": 11 },
-    { "name": "Server", "kind": "class", "file": "types.py", "line": 15 },
-    { "name": "__init__", "kind": "method", "file": "types.py", "line": 16 },
-    { "name": "handle", "kind": "method", "file": "types.py", "line": 19 },
-    { "name": "close", "kind": "method", "file": "types.py", "line": 22 },
-    { "name": "new_server", "kind": "function", "file": "types.py", "line": 26 }
+    { "name": "Config", "kind": "class", "file": "types.py", "line": 0 },
+    { "name": "__init__", "kind": "method", "file": "types.py", "line": 1 },
+    { "name": "Handler", "kind": "class", "file": "types.py", "line": 6 },
+    { "name": "handle", "kind": "method", "file": "types.py", "line": 7 },
+    { "name": "close", "kind": "method", "file": "types.py", "line": 10 },
+    { "name": "Server", "kind": "class", "file": "types.py", "line": 14 },
+    { "name": "__init__", "kind": "method", "file": "types.py", "line": 15 },
+    { "name": "handle", "kind": "method", "file": "types.py", "line": 18 },
+    { "name": "close", "kind": "method", "file": "types.py", "line": 21 },
+    { "name": "new_server", "kind": "function", "file": "types.py", "line": 25 }
   ]
 }

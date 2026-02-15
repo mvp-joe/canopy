@@ -222,11 +222,11 @@ func BenchmarkQueryDefinitionAt(b *testing.B) {
 
 	q := e.Query()
 
-	// Query the "Validate" method call inside App.Run — line 89 in benchGoSource:
+	// Query the "Validate" method call inside App.Run — line 88 (0-based) in benchGoSource:
 	//   if err := a.config.Validate(); err != nil {
 	// "Validate" starts at column ~23 (after "a.config.").
 	// Use a reference we know exists: the Logger interface usage.
-	// Line 73: func NewApp(cfg *Config, log Logger) *App {
+	// Line 72 (0-based): func NewApp(cfg *Config, log Logger) *App {
 	// "Config" reference at col ~22, "Logger" at col ~35.
 
 	b.ResetTimer()
@@ -234,7 +234,7 @@ func BenchmarkQueryDefinitionAt(b *testing.B) {
 		// Query DefinitionAt for "Logger" on the NewApp line.
 		// Even if the exact position doesn't find a resolved reference,
 		// the benchmark exercises the full query path (file lookup, reference scan, resolution).
-		_, err := q.DefinitionAt(srcPath, 73, 35)
+		_, err := q.DefinitionAt(srcPath, 72, 35)
 		if err != nil {
 			b.Fatal(err)
 		}

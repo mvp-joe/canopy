@@ -82,7 +82,7 @@ func TestCExtract_FunctionDefinition(t *testing.T) {
 	assert.Equal(t, "add", fn.Name)
 	assert.Equal(t, "function", fn.Kind)
 	assert.Equal(t, "public", fn.Visibility)
-	assert.Equal(t, 1, fn.StartLine)
+	assert.Equal(t, 0, fn.StartLine)
 }
 
 func TestCExtract_FunctionDeclaration(t *testing.T) {

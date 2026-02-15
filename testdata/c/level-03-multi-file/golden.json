@@ -1,21 +1,21 @@
 {
   "definitions": [
-    { "name": "main", "kind": "function", "file": "main.c", "line": 4 },
-    { "name": "square", "kind": "function", "file": "util.c", "line": 3 },
-    { "name": "cube", "kind": "function", "file": "util.c", "line": 7 },
-    { "name": "UTIL_H", "kind": "constant", "file": "util.h", "line": 2 },
-    { "name": "VERSION", "kind": "constant", "file": "util.h", "line": 4 },
-    { "name": "square", "kind": "function", "file": "util.h", "line": 11 },
-    { "name": "cube", "kind": "function", "file": "util.h", "line": 12 }
+    { "name": "main", "kind": "function", "file": "main.c", "line": 3 },
+    { "name": "square", "kind": "function", "file": "util.c", "line": 2 },
+    { "name": "cube", "kind": "function", "file": "util.c", "line": 6 },
+    { "name": "UTIL_H", "kind": "constant", "file": "util.h", "line": 1 },
+    { "name": "VERSION", "kind": "constant", "file": "util.h", "line": 3 },
+    { "name": "square", "kind": "function", "file": "util.h", "line": 10 },
+    { "name": "cube", "kind": "function", "file": "util.h", "line": 11 }
   ],
   "references": [
     {
-      "from": { "file": "main.c", "line": 5, "col": 12 },
-      "to": { "name": "square", "file": "util.h", "line": 11 }
+      "from": { "file": "main.c", "line": 4, "col": 12 },
+      "to": { "name": "square", "file": "util.h", "line": 10 }
     },
     {
-      "from": { "file": "main.c", "line": 6, "col": 12 },
-      "to": { "name": "cube", "file": "util.h", "line": 12 }
+      "from": { "file": "main.c", "line": 5, "col": 12 },
+      "to": { "name": "cube", "file": "util.h", "line": 11 }
     }
   ],
   "calls": [
