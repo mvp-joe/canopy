@@ -21,6 +21,40 @@ type Location struct {
 	EndCol    int
 }
 
+// SymbolAt returns the most specific (narrowest) symbol whose range contains the
+// given file position. Returns nil with no error if no symbol exists at that location.
+func (q *QueryBuilder) SymbolAt(file string, line, col int) (*store.Symbol, error) {
+	f, err := q.store.FileByPath(file)
+	if err != nil {
+		return nil, fmt.Errorf("symbol at: lookup file: %w", err)
+	}
+	if f == nil {
+		return nil, nil
+	}
+
+	// Find all symbols containing this position, ordered by span size (narrowest first).
+	row := q.store.DB().QueryRow(
+		`SELECT `+store.SymbolCols+` FROM symbols
+		 WHERE file_id = ?
+		   AND (start_line < ? OR (start_line = ? AND start_col <= ?))
+		   AND (end_line > ? OR (end_line = ? AND end_col >= ?))
+		 ORDER BY (end_line - start_line) ASC, (end_col - start_col) ASC
+		 LIMIT 1`,
+		f.ID,
+		line, line, col,
+		line, line, col,
+	)
+
+	sym, err := q.store.ScanSymbolRow(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("symbol at: scan: %w", err)
+	}
+	return sym, nil
+}
+
 // DefinitionAt finds the definition(s) of the symbol referenced at the given position.
 // It looks up references at (file, line, col), resolves them, and returns
 // the target symbol locations.

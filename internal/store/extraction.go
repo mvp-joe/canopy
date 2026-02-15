@@ -93,7 +93,13 @@ func (s *Store) scanSymbol(scanner interface{ Scan(...any) error }) (*Symbol, er
 	return sym, nil
 }
 
-const symbolCols = `id, file_id, name, kind, visibility, modifiers, signature_hash,
+// ScanSymbolRow scans a single row into a Symbol. Exported for use by QueryBuilder.
+func (s *Store) ScanSymbolRow(scanner interface{ Scan(...any) error }) (*Symbol, error) {
+	return s.scanSymbol(scanner)
+}
+
+// SymbolCols is the column list for symbol queries, exported for use by QueryBuilder.
+const SymbolCols = `id, file_id, name, kind, visibility, modifiers, signature_hash,
 	start_line, start_col, end_line, end_col, parent_symbol_id`
 
 func (s *Store) querySymbols(query string, args ...any) ([]*Symbol, error) {
@@ -114,19 +120,19 @@ func (s *Store) querySymbols(query string, args ...any) ([]*Symbol, error) {
 }
 
 func (s *Store) SymbolsByFile(fileID int64) ([]*Symbol, error) {
-	return s.querySymbols("SELECT "+symbolCols+" FROM symbols WHERE file_id = ?", fileID)
+	return s.querySymbols("SELECT "+SymbolCols+" FROM symbols WHERE file_id = ?", fileID)
 }
 
 func (s *Store) SymbolsByName(name string) ([]*Symbol, error) {
-	return s.querySymbols("SELECT "+symbolCols+" FROM symbols WHERE name = ?", name)
+	return s.querySymbols("SELECT "+SymbolCols+" FROM symbols WHERE name = ?", name)
 }
 
 func (s *Store) SymbolsByKind(kind string) ([]*Symbol, error) {
-	return s.querySymbols("SELECT "+symbolCols+" FROM symbols WHERE kind = ?", kind)
+	return s.querySymbols("SELECT "+SymbolCols+" FROM symbols WHERE kind = ?", kind)
 }
 
 func (s *Store) SymbolChildren(symbolID int64) ([]*Symbol, error) {
-	return s.querySymbols("SELECT "+symbolCols+" FROM symbols WHERE parent_symbol_id = ?", symbolID)
+	return s.querySymbols("SELECT "+SymbolCols+" FROM symbols WHERE parent_symbol_id = ?", symbolID)
 }
 
 // --- Scope operations ---

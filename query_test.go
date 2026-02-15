@@ -20,6 +20,69 @@ func newTestQueryBuilder(t *testing.T) (*QueryBuilder, *store.Store) {
 	return &QueryBuilder{store: s}, s
 }
 
+func TestSymbolAt_ReturnsCorrectSymbol(t *testing.T) {
+	q, s := newTestQueryBuilder(t)
+
+	fID, err := s.InsertFile(&store.File{
+		Path: "/test.go", Language: "go", Hash: "h", LastIndexed: time.Now(),
+	})
+	require.NoError(t, err)
+
+	// Outer symbol: a struct spanning lines 1-20.
+	outerID, err := s.InsertSymbol(&store.Symbol{
+		FileID: &fID, Name: "MyStruct", Kind: "struct", Visibility: "public",
+		StartLine: 1, StartCol: 0, EndLine: 20, EndCol: 1,
+	})
+	require.NoError(t, err)
+
+	// Inner symbol: a method inside the struct spanning lines 5-10.
+	innerID, err := s.InsertSymbol(&store.Symbol{
+		FileID: &fID, Name: "DoWork", Kind: "method", Visibility: "public",
+		StartLine: 5, StartCol: 1, EndLine: 10, EndCol: 1,
+		ParentSymbolID: &outerID,
+	})
+	require.NoError(t, err)
+
+	// Query a position inside the inner symbol -- should return the narrowest match.
+	sym, err := q.SymbolAt("/test.go", 7, 5)
+	require.NoError(t, err)
+	require.NotNil(t, sym)
+	assert.Equal(t, innerID, sym.ID)
+	assert.Equal(t, "DoWork", sym.Name)
+	assert.Equal(t, "method", sym.Kind)
+
+	// Query a position inside the outer symbol but outside the inner one.
+	sym, err = q.SymbolAt("/test.go", 15, 0)
+	require.NoError(t, err)
+	require.NotNil(t, sym)
+	assert.Equal(t, outerID, sym.ID)
+	assert.Equal(t, "MyStruct", sym.Name)
+	assert.Equal(t, "struct", sym.Kind)
+}
+
+func TestSymbolAt_NoSymbol(t *testing.T) {
+	q, s := newTestQueryBuilder(t)
+
+	_, err := s.InsertFile(&store.File{
+		Path: "/test.go", Language: "go", Hash: "h", LastIndexed: time.Now(),
+	})
+	require.NoError(t, err)
+
+	// File exists but no symbols at this location.
+	sym, err := q.SymbolAt("/test.go", 50, 0)
+	require.NoError(t, err)
+	assert.Nil(t, sym)
+}
+
+func TestSymbolAt_NoFile(t *testing.T) {
+	q, _ := newTestQueryBuilder(t)
+
+	// File doesn't exist at all.
+	sym, err := q.SymbolAt("/nonexistent.go", 1, 0)
+	require.NoError(t, err)
+	assert.Nil(t, sym)
+}
+
 func TestDefinitionAt_NoFile(t *testing.T) {
 	q, _ := newTestQueryBuilder(t)
 
