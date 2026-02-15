@@ -1,2 +1,5 @@
 canopy
 .scratch/
+target/
+Cargo.lock
+mise.toml
