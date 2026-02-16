@@ -1,0 +1,8 @@
+{
+  "definitions": [
+    { "name": "Calculator", "kind": "class", "file": "calculator.rb", "line": 0 },
+    { "name": "add", "kind": "method", "file": "calculator.rb", "line": 1 },
+    { "name": "subtract", "kind": "method", "file": "calculator.rb", "line": 5 },
+    { "name": "multiply", "kind": "method", "file": "calculator.rb", "line": 9 }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "definitions": [
+    { "name": "Address", "kind": "struct", "file": "nested.c", "line": 0 },
+    { "name": "Person", "kind": "struct", "file": "nested.c", "line": 6 },
+    { "name": "Company", "kind": "struct", "file": "nested.c", "line": 13 },
+    { "name": "init_address", "kind": "function", "file": "nested.c", "line": 19 },
+    { "name": "init_person", "kind": "function", "file": "nested.c", "line": 23 }
+  ],
+  "calls": [
+    { "caller": "init_person", "callee": "init_address" }
+  ]
+}

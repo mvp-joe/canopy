@@ -1,0 +1,29 @@
+{
+  "definitions": [
+    { "name": "Point", "kind": "class", "file": "types.py", "line": 0 },
+    { "name": "__init__", "kind": "method", "file": "types.py", "line": 1 },
+    { "name": "distance", "kind": "function", "file": "types.py", "line": 6 },
+    { "name": "origin", "kind": "function", "file": "types.py", "line": 12 }
+  ],
+  "references": [
+    {
+      "from": { "file": "types.py", "line": 6, "col": 16 },
+      "to": { "name": "Point", "file": "types.py", "line": 0 }
+    },
+    {
+      "from": { "file": "types.py", "line": 6, "col": 26 },
+      "to": { "name": "Point", "file": "types.py", "line": 0 }
+    },
+    {
+      "from": { "file": "types.py", "line": 12, "col": 16 },
+      "to": { "name": "Point", "file": "types.py", "line": 0 }
+    },
+    {
+      "from": { "file": "types.py", "line": 13, "col": 11 },
+      "to": { "name": "Point", "file": "types.py", "line": 0 }
+    }
+  ],
+  "calls": [
+    { "caller": "origin", "callee": "Point" }
+  ]
+}

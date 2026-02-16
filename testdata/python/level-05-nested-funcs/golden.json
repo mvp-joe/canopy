@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "outer", "kind": "function", "file": "closures.py", "line": 0 },
+    { "name": "inner", "kind": "function", "file": "closures.py", "line": 3 },
+    { "name": "make_counter", "kind": "function", "file": "closures.py", "line": 9 },
+    { "name": "increment", "kind": "function", "file": "closures.py", "line": 12 },
+    { "name": "get_count", "kind": "function", "file": "closures.py", "line": 17 }
+  ]
+}

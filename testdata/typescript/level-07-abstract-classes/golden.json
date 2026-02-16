@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "shapes.ts", "line": 0 },
+    { "name": "describe", "kind": "method", "file": "shapes.ts", "line": 4 },
+    { "name": "Circle", "kind": "class", "file": "shapes.ts", "line": 9 },
+    { "name": "constructor", "kind": "method", "file": "shapes.ts", "line": 12 },
+    { "name": "area", "kind": "method", "file": "shapes.ts", "line": 17 },
+    { "name": "perimeter", "kind": "method", "file": "shapes.ts", "line": 21 }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "Color", "kind": "enum", "file": "shapes.rs", "line": 0 },
+    { "name": "Shape", "kind": "enum", "file": "shapes.rs", "line": 6 },
+    { "name": "area", "kind": "function", "file": "shapes.rs", "line": 12 },
+    { "name": "main", "kind": "function", "file": "shapes.rs", "line": 20 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "area" }
+  ]
+}

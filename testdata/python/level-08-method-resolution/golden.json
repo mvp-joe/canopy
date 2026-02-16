@@ -1,0 +1,28 @@
+{
+  "definitions": [
+    { "name": "Animal", "kind": "class", "file": "animals.py", "line": 0 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 1 },
+    { "name": "greet", "kind": "method", "file": "animals.py", "line": 4 },
+    { "name": "Dog", "kind": "class", "file": "animals.py", "line": 8 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 9 },
+    { "name": "Cat", "kind": "class", "file": "animals.py", "line": 13 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 14 }
+  ],
+  "references": [
+    {
+      "from": { "file": "animals.py", "line": 5, "col": 20 },
+      "to": { "name": "speak", "file": "animals.py", "line": 1 }
+    },
+    {
+      "from": { "file": "animals.py", "line": 8, "col": 10 },
+      "to": { "name": "Animal", "file": "animals.py", "line": 0 }
+    },
+    {
+      "from": { "file": "animals.py", "line": 13, "col": 10 },
+      "to": { "name": "Animal", "file": "animals.py", "line": 0 }
+    }
+  ],
+  "calls": [
+    { "caller": "greet", "callee": "speak" }
+  ]
+}

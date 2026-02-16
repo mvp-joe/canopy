@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "generics", "kind": "package", "file": "generics.go", "line": 0 },
+    { "name": "Pair", "kind": "struct", "file": "generics.go", "line": 2 },
+    { "name": "NewPair", "kind": "function", "file": "generics.go", "line": 7 },
+    { "name": "Map", "kind": "function", "file": "generics.go", "line": 11 },
+    { "name": "result", "kind": "variable", "file": "generics.go", "line": 12 }
+  ]
+}

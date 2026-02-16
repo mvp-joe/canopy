@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "animals", "kind": "package", "file": "iface.go", "line": 0 },
+    { "name": "Animal", "kind": "interface", "file": "iface.go", "line": 2 },
+    { "name": "Mover", "kind": "interface", "file": "iface.go", "line": 7 },
+    { "name": "animals", "kind": "package", "file": "dog.go", "line": 0 },
+    { "name": "Dog", "kind": "struct", "file": "dog.go", "line": 2 },
+    { "name": "Name", "kind": "method", "file": "dog.go", "line": 6 },
+    { "name": "Sound", "kind": "method", "file": "dog.go", "line": 10 },
+    { "name": "Move", "kind": "method", "file": "dog.go", "line": 14 },
+    { "name": "NewDog", "kind": "function", "file": "dog.go", "line": 18 },
+    { "name": "animals", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "Describe", "kind": "function", "file": "main.go", "line": 2 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 2, "col": 16 },
+      "to": { "name": "Animal", "file": "iface.go", "line": 2 }
+    }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" },
+    { "type": "Dog", "interface": "Mover" }
+  ]
+}

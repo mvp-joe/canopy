@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "math", "kind": "module", "file": "modules.rs", "line": 0 },
+    { "name": "add", "kind": "function", "file": "modules.rs", "line": 1 },
+    { "name": "multiply", "kind": "function", "file": "modules.rs", "line": 5 },
+    { "name": "utils", "kind": "module", "file": "modules.rs", "line": 10 },
+    { "name": "greet", "kind": "function", "file": "modules.rs", "line": 11 },
+    { "name": "main", "kind": "function", "file": "modules.rs", "line": 16 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "add" },
+    { "caller": "main", "callee": "multiply" },
+    { "caller": "main", "callee": "greet" }
+  ]
+}

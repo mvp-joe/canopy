@@ -1,0 +1,14 @@
+{
+  "definitions": [
+    { "name": "Meters", "kind": "type_alias", "file": "aliases.rs", "line": 0 },
+    { "name": "Kilometers", "kind": "type_alias", "file": "aliases.rs", "line": 1 },
+    { "name": "Point", "kind": "type_alias", "file": "aliases.rs", "line": 2 },
+    { "name": "distance", "kind": "function", "file": "aliases.rs", "line": 4 },
+    { "name": "to_km", "kind": "function", "file": "aliases.rs", "line": 10 },
+    { "name": "main", "kind": "function", "file": "aliases.rs", "line": 14 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "distance" },
+    { "caller": "main", "callee": "to_km" }
+  ]
+}

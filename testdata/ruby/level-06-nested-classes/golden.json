@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "Animals", "kind": "module", "file": "animals.rb", "line": 0 },
+    { "name": "Base", "kind": "class", "file": "animals.rb", "line": 1 },
+    { "name": "breathe", "kind": "method", "file": "animals.rb", "line": 2 },
+    { "name": "Dog", "kind": "class", "file": "animals.rb", "line": 7 },
+    { "name": "speak", "kind": "method", "file": "animals.rb", "line": 8 },
+    { "name": "Cat", "kind": "class", "file": "animals.rb", "line": 13 },
+    { "name": "speak", "kind": "method", "file": "animals.rb", "line": 14 }
+  ]
+}

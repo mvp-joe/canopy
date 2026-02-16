@@ -1,0 +1,30 @@
+{
+  "definitions": [
+    { "name": "MathHelper", "kind": "class", "file": "math.rb", "line": 0 },
+    { "name": "square", "kind": "method", "file": "math.rb", "line": 1 },
+    { "name": "double", "kind": "method", "file": "math.rb", "line": 5 },
+    { "name": "run", "kind": "function", "file": "app.rb", "line": 2 }
+  ],
+  "references": [
+    {
+      "from": { "file": "app.rb", "line": 3, "col": 6 },
+      "to": { "name": "MathHelper", "file": "math.rb", "line": 0 }
+    },
+    {
+      "from": { "file": "app.rb", "line": 3, "col": 17 },
+      "to": { "name": "square", "file": "math.rb", "line": 1 }
+    },
+    {
+      "from": { "file": "app.rb", "line": 4, "col": 6 },
+      "to": { "name": "MathHelper", "file": "math.rb", "line": 0 }
+    },
+    {
+      "from": { "file": "app.rb", "line": 4, "col": 17 },
+      "to": { "name": "double", "file": "math.rb", "line": 5 }
+    }
+  ],
+  "calls": [
+    { "caller": "run", "callee": "square" },
+    { "caller": "run", "callee": "double" }
+  ]
+}

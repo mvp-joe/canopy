@@ -1,0 +1,32 @@
+{
+  "definitions": [
+    { "name": "PI", "kind": "constant", "file": "aliases.cpp", "line": 0 },
+    { "name": "SQUARE", "kind": "function", "file": "aliases.cpp", "line": 1 },
+    { "name": "Integer", "kind": "type_alias", "file": "aliases.cpp", "line": 3 },
+    { "name": "Size", "kind": "type_alias", "file": "aliases.cpp", "line": 4 },
+    { "name": "add", "kind": "function", "file": "aliases.cpp", "line": 6 },
+    { "name": "compute", "kind": "function", "file": "aliases.cpp", "line": 10 }
+  ],
+  "references": [
+    {
+      "from": { "file": "aliases.cpp", "line": 6, "col": 0 },
+      "to": { "name": "Integer", "file": "aliases.cpp", "line": 3 }
+    },
+    {
+      "from": { "file": "aliases.cpp", "line": 6, "col": 12 },
+      "to": { "name": "Integer", "file": "aliases.cpp", "line": 3 }
+    },
+    {
+      "from": { "file": "aliases.cpp", "line": 6, "col": 23 },
+      "to": { "name": "Integer", "file": "aliases.cpp", "line": 3 }
+    },
+    {
+      "from": { "file": "aliases.cpp", "line": 10, "col": 0 },
+      "to": { "name": "Size", "file": "aliases.cpp", "line": 4 }
+    },
+    {
+      "from": { "file": "aliases.cpp", "line": 11, "col": 11 },
+      "to": { "name": "SQUARE", "file": "aliases.cpp", "line": 1 }
+    }
+  ]
+}

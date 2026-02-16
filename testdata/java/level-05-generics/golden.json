@@ -1,0 +1,13 @@
+{
+  "definitions": [
+    { "name": "Container", "kind": "class", "file": "Container.java", "line": 0 },
+    { "name": "Container", "kind": "constructor", "file": "Container.java", "line": 3 },
+    { "name": "getValue", "kind": "method", "file": "Container.java", "line": 7 },
+    { "name": "transform", "kind": "method", "file": "Container.java", "line": 11 },
+    { "name": "Transformer", "kind": "interface", "file": "Transformer.java", "line": 0 },
+    { "name": "apply", "kind": "method", "file": "Transformer.java", "line": 1 },
+    { "name": "NumberBox", "kind": "class", "file": "NumberBox.java", "line": 0 },
+    { "name": "NumberBox", "kind": "constructor", "file": "NumberBox.java", "line": 3 },
+    { "name": "doubleValue", "kind": "method", "file": "NumberBox.java", "line": 7 }
+  ]
+}

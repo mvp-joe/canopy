@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "double_val", "kind": "function", "file": "helpers.c", "line": 0 },
+    { "name": "clamp", "kind": "function", "file": "helpers.c", "line": 4 },
+    { "name": "transform", "kind": "function", "file": "helpers.c", "line": 10 },
+    { "name": "transform", "kind": "function", "file": "main.c", "line": 2 },
+    { "name": "double_val", "kind": "function", "file": "main.c", "line": 4 },
+    { "name": "main", "kind": "function", "file": "main.c", "line": 8 }
+  ],
+  "calls": [
+    { "caller": "transform", "callee": "clamp" },
+    { "caller": "transform", "callee": "double_val" },
+    { "caller": "main", "callee": "transform" },
+    { "caller": "main", "callee": "double_val" }
+  ]
+}

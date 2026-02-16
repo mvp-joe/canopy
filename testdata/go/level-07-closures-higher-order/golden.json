@@ -1,0 +1,24 @@
+{
+  "definitions": [
+    { "name": "closures", "kind": "package", "file": "closures.go", "line": 0 },
+    { "name": "Apply", "kind": "function", "file": "closures.go", "line": 2 },
+    { "name": "Adder", "kind": "function", "file": "closures.go", "line": 6 },
+    { "name": "main", "kind": "function", "file": "closures.go", "line": 12 },
+    { "name": "add5", "kind": "variable", "file": "closures.go", "line": 13 },
+    { "name": "result", "kind": "variable", "file": "closures.go", "line": 14 }
+  ],
+  "references": [
+    {
+      "from": { "file": "closures.go", "line": 13, "col": 9 },
+      "to": { "name": "Adder", "file": "closures.go", "line": 6 }
+    },
+    {
+      "from": { "file": "closures.go", "line": 14, "col": 11 },
+      "to": { "name": "Apply", "file": "closures.go", "line": 2 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "Adder" },
+    { "caller": "main", "callee": "Apply" }
+  ]
+}

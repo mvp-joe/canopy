@@ -1,0 +1,22 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "base.php", "line": 2 },
+    { "name": "area", "kind": "method", "file": "base.php", "line": 3 },
+    { "name": "describe", "kind": "method", "file": "base.php", "line": 5 },
+    { "name": "Circle", "kind": "class", "file": "circle.php", "line": 4 },
+    { "name": "__construct", "kind": "method", "file": "circle.php", "line": 7 },
+    { "name": "area", "kind": "method", "file": "circle.php", "line": 11 },
+    { "name": "main", "kind": "function", "file": "circle.php", "line": 16 }
+  ],
+  "references": [
+    {
+      "from": { "file": "circle.php", "line": 4, "col": 21 },
+      "to": { "name": "Shape", "file": "base.php", "line": 2 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "area" },
+    { "caller": "main", "callee": "describe" },
+    { "caller": "describe", "callee": "area" }
+  ]
+}

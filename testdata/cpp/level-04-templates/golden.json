@@ -1,0 +1,17 @@
+{
+  "definitions": [
+    { "name": "max_val", "kind": "function", "file": "templates.cpp", "line": 2 },
+    { "name": "Pair", "kind": "class", "file": "templates.cpp", "line": 7 },
+    { "name": "main", "kind": "function", "file": "templates.cpp", "line": 16 }
+  ],
+  "references": [
+    {
+      "from": { "file": "templates.cpp", "line": 17, "col": 12 },
+      "to": { "name": "max_val", "file": "templates.cpp", "line": 2 }
+    },
+    {
+      "from": { "file": "templates.cpp", "line": 18, "col": 4 },
+      "to": { "name": "Pair", "file": "templates.cpp", "line": 7 }
+    }
+  ]
+}

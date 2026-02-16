@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "Pair", "kind": "struct", "file": "generics.rs", "line": 0 },
+    { "name": "new", "kind": "function", "file": "generics.rs", "line": 6 },
+    { "name": "first", "kind": "method", "file": "generics.rs", "line": 10 },
+    { "name": "Summarize", "kind": "trait", "file": "generics.rs", "line": 15 },
+    { "name": "largest", "kind": "function", "file": "generics.rs", "line": 19 },
+    { "name": "print_it", "kind": "function", "file": "generics.rs", "line": 23 },
+    { "name": "main", "kind": "function", "file": "generics.rs", "line": 27 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "new" },
+    { "caller": "main", "callee": "largest" }
+  ]
+}

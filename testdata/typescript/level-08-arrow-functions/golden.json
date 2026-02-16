@@ -1,0 +1,31 @@
+{
+  "definitions": [
+    { "name": "greet", "kind": "function", "file": "main.ts", "line": 0 },
+    { "name": "add", "kind": "function", "file": "main.ts", "line": 4 },
+    { "name": "double", "kind": "function", "file": "main.ts", "line": 6 },
+    { "name": "apply", "kind": "function", "file": "main.ts", "line": 8 },
+    { "name": "main", "kind": "function", "file": "main.ts", "line": 12 },
+    { "name": "msg", "kind": "constant", "file": "main.ts", "line": 13 },
+    { "name": "sum", "kind": "constant", "file": "main.ts", "line": 14 },
+    { "name": "result", "kind": "constant", "file": "main.ts", "line": 15 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.ts", "line": 13, "col": 14 },
+      "to": { "name": "greet", "file": "main.ts", "line": 0 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 14, "col": 14 },
+      "to": { "name": "add", "file": "main.ts", "line": 4 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 15, "col": 17 },
+      "to": { "name": "apply", "file": "main.ts", "line": 8 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "greet" },
+    { "caller": "main", "callee": "add" },
+    { "caller": "main", "callee": "apply" }
+  ]
+}

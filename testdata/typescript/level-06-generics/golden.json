@@ -1,0 +1,29 @@
+{
+  "definitions": [
+    { "name": "Sortable", "kind": "interface", "file": "main.ts", "line": 0 },
+    { "name": "NumBox", "kind": "class", "file": "main.ts", "line": 4 },
+    { "name": "constructor", "kind": "method", "file": "main.ts", "line": 7 },
+    { "name": "compareTo", "kind": "method", "file": "main.ts", "line": 11 },
+    { "name": "first", "kind": "function", "file": "main.ts", "line": 16 },
+    { "name": "main", "kind": "function", "file": "main.ts", "line": 20 },
+    { "name": "box", "kind": "constant", "file": "main.ts", "line": 21 },
+    { "name": "result", "kind": "constant", "file": "main.ts", "line": 22 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.ts", "line": 21, "col": 18 },
+      "to": { "name": "NumBox", "file": "main.ts", "line": 4 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 22, "col": 17 },
+      "to": { "name": "first", "file": "main.ts", "line": 16 }
+    }
+  ],
+  "implementations": [
+    { "type": "NumBox", "interface": "Sortable" }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "NumBox" },
+    { "caller": "main", "callee": "first" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "log_calls", "kind": "function", "file": "decorators.py", "line": 0 },
+    { "name": "Cache", "kind": "class", "file": "decorators.py", "line": 4 },
+    { "name": "clear", "kind": "static_method", "file": "decorators.py", "line": 5 },
+    { "name": "create", "kind": "class_method", "file": "decorators.py", "line": 9 },
+    { "name": "size", "kind": "property", "file": "decorators.py", "line": 13 },
+    { "name": "get", "kind": "method", "file": "decorators.py", "line": 17 }
+  ]
+}

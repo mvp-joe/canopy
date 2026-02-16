@@ -1,0 +1,14 @@
+{
+  "definitions": [
+    { "name": "Outer", "kind": "class", "file": "nested.py", "line": 0 },
+    { "name": "Inner", "kind": "class", "file": "nested.py", "line": 1 },
+    { "name": "method", "kind": "method", "file": "nested.py", "line": 2 },
+    { "name": "create_inner", "kind": "method", "file": "nested.py", "line": 5 },
+    { "name": "Tree", "kind": "class", "file": "nested.py", "line": 9 },
+    { "name": "Node", "kind": "class", "file": "nested.py", "line": 10 },
+    { "name": "__init__", "kind": "method", "file": "nested.py", "line": 11 },
+    { "name": "display", "kind": "method", "file": "nested.py", "line": 14 },
+    { "name": "__init__", "kind": "method", "file": "nested.py", "line": 17 },
+    { "name": "add", "kind": "method", "file": "nested.py", "line": 20 }
+  ]
+}

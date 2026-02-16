@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "Greetable", "kind": "module", "file": "mixins.rb", "line": 0 },
+    { "name": "greet", "kind": "method", "file": "mixins.rb", "line": 1 },
+    { "name": "Farewell", "kind": "module", "file": "mixins.rb", "line": 6 },
+    { "name": "goodbye", "kind": "method", "file": "mixins.rb", "line": 7 },
+    { "name": "Person", "kind": "class", "file": "mixins.rb", "line": 12 },
+    { "name": "initialize", "kind": "method", "file": "mixins.rb", "line": 15 }
+  ]
+}

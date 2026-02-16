@@ -1,0 +1,17 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "abstract.cpp", "line": 2 },
+    { "name": "Printable", "kind": "class", "file": "abstract.cpp", "line": 9 },
+    { "name": "Circle", "kind": "class", "file": "abstract.cpp", "line": 14 }
+  ],
+  "references": [
+    {
+      "from": { "file": "abstract.cpp", "line": 14, "col": 22 },
+      "to": { "name": "Shape", "file": "abstract.cpp", "line": 2 }
+    },
+    {
+      "from": { "file": "abstract.cpp", "line": 14, "col": 36 },
+      "to": { "name": "Printable", "file": "abstract.cpp", "line": 9 }
+    }
+  ]
+}

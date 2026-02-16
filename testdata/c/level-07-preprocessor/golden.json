@@ -1,0 +1,13 @@
+{
+  "definitions": [
+    { "name": "VERSION_MAJOR", "kind": "constant", "file": "macros.c", "line": 0 },
+    { "name": "VERSION_MINOR", "kind": "constant", "file": "macros.c", "line": 1 },
+    { "name": "VERSION_PATCH", "kind": "constant", "file": "macros.c", "line": 2 },
+    { "name": "SQUARE", "kind": "function", "file": "macros.c", "line": 4 },
+    { "name": "MIN", "kind": "function", "file": "macros.c", "line": 5 },
+    { "name": "MAX", "kind": "function", "file": "macros.c", "line": 6 },
+    { "name": "CLAMP", "kind": "function", "file": "macros.c", "line": 7 },
+    { "name": "ARRAY_SIZE", "kind": "function", "file": "macros.c", "line": 9 },
+    { "name": "sum_squares", "kind": "function", "file": "macros.c", "line": 11 }
+  ]
+}

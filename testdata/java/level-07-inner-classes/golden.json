@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "Outer", "kind": "class", "file": "Outer.java", "line": 0 },
+    { "name": "Outer", "kind": "constructor", "file": "Outer.java", "line": 3 },
+    { "name": "StaticNested", "kind": "class", "file": "Outer.java", "line": 7 },
+    { "name": "StaticNested", "kind": "constructor", "file": "Outer.java", "line": 10 },
+    { "name": "getLabel", "kind": "method", "file": "Outer.java", "line": 14 },
+    { "name": "Inner", "kind": "class", "file": "Outer.java", "line": 19 },
+    { "name": "doubleValue", "kind": "method", "file": "Outer.java", "line": 20 }
+  ]
+}

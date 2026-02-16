@@ -1,0 +1,13 @@
+{
+  "definitions": [
+    { "name": "Color", "kind": "enum", "file": "enums.cpp", "line": 0 },
+    { "name": "Direction", "kind": "enum", "file": "enums.cpp", "line": 6 },
+    { "name": "pick_color", "kind": "function", "file": "enums.cpp", "line": 13 }
+  ],
+  "references": [
+    {
+      "from": { "file": "enums.cpp", "line": 13, "col": 0 },
+      "to": { "name": "Color", "file": "enums.cpp", "line": 0 }
+    }
+  ]
+}

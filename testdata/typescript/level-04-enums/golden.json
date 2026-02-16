@@ -1,0 +1,8 @@
+{
+  "definitions": [
+    { "name": "Color", "kind": "enum", "file": "main.ts", "line": 0 },
+    { "name": "Priority", "kind": "enum", "file": "main.ts", "line": 6 },
+    { "name": "colorName", "kind": "function", "file": "main.ts", "line": 12 },
+    { "name": "primary", "kind": "constant", "file": "main.ts", "line": 16 }
+  ]
+}

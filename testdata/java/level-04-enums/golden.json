@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "Priority", "kind": "enum", "file": "Priority.java", "line": 0 },
+    { "name": "Task", "kind": "class", "file": "Task.java", "line": 0 },
+    { "name": "Task", "kind": "constructor", "file": "Task.java", "line": 4 },
+    { "name": "getPriority", "kind": "method", "file": "Task.java", "line": 9 },
+    { "name": "isUrgent", "kind": "method", "file": "Task.java", "line": 13 }
+  ]
+}

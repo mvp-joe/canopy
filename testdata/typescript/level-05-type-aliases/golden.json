@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "ID", "kind": "type_alias", "file": "main.ts", "line": 0 },
+    { "name": "Result", "kind": "type_alias", "file": "main.ts", "line": 2 },
+    { "name": "Status", "kind": "type_alias", "file": "main.ts", "line": 7 },
+    { "name": "createId", "kind": "function", "file": "main.ts", "line": 9 },
+    { "name": "current", "kind": "constant", "file": "main.ts", "line": 13 }
+  ]
+}

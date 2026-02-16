@@ -1,0 +1,12 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "Shape.java", "line": 0 },
+    { "name": "Shape", "kind": "constructor", "file": "Shape.java", "line": 3 },
+    { "name": "getColor", "kind": "method", "file": "Shape.java", "line": 7 },
+    { "name": "area", "kind": "method", "file": "Shape.java", "line": 11 },
+    { "name": "Circle", "kind": "class", "file": "Circle.java", "line": 0 },
+    { "name": "Circle", "kind": "constructor", "file": "Circle.java", "line": 3 },
+    { "name": "area", "kind": "method", "file": "Circle.java", "line": 8 },
+    { "name": "circumference", "kind": "method", "file": "Circle.java", "line": 13 }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "definitions": [
+    { "name": "Animal", "kind": "class", "file": "animals.py", "line": 0 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 1 },
+    { "name": "Flyable", "kind": "class", "file": "animals.py", "line": 5 },
+    { "name": "fly", "kind": "method", "file": "animals.py", "line": 6 },
+    { "name": "Bird", "kind": "class", "file": "animals.py", "line": 10 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 11 },
+    { "name": "Penguin", "kind": "class", "file": "animals.py", "line": 15 },
+    { "name": "speak", "kind": "method", "file": "animals.py", "line": 16 },
+    { "name": "fly", "kind": "method", "file": "animals.py", "line": 19 }
+  ]
+}

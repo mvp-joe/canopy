@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "greet", "kind": "function", "file": "helpers.py", "line": 0 },
+    { "name": "farewell", "kind": "function", "file": "helpers.py", "line": 4 },
+    { "name": "VERSION", "kind": "variable", "file": "helpers.py", "line": 8 },
+    { "name": "welcome", "kind": "function", "file": "main.py", "line": 4 },
+    { "name": "leave", "kind": "function", "file": "main.py", "line": 8 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.py", "line": 5, "col": 11 },
+      "to": { "name": "greet", "file": "helpers.py", "line": 0 }
+    },
+    {
+      "from": { "file": "main.py", "line": 9, "col": 11 },
+      "to": { "name": "farewell", "file": "helpers.py", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "welcome", "callee": "greet" },
+    { "caller": "leave", "callee": "farewell" }
+  ]
+}

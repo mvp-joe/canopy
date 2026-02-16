@@ -1,0 +1,12 @@
+{
+  "definitions": [
+    { "name": "vec_of_strings", "kind": "function", "file": "async_macros.rs", "line": 0 },
+    { "name": "fetch", "kind": "function", "file": "async_macros.rs", "line": 6 },
+    { "name": "process", "kind": "function", "file": "async_macros.rs", "line": 10 },
+    { "name": "sync_helper", "kind": "function", "file": "async_macros.rs", "line": 14 },
+    { "name": "main", "kind": "function", "file": "async_macros.rs", "line": 18 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "sync_helper" }
+  ]
+}

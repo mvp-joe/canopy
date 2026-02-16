@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "enums", "kind": "package", "file": "enums.go", "line": 0 },
+    { "name": "Color", "kind": "type_alias", "file": "enums.go", "line": 2 },
+    { "name": "Red", "kind": "constant", "file": "enums.go", "line": 4 },
+    { "name": "Green", "kind": "constant", "file": "enums.go", "line": 4 },
+    { "name": "Blue", "kind": "constant", "file": "enums.go", "line": 4 },
+    { "name": "LogLevel", "kind": "type_alias", "file": "enums.go", "line": 10 },
+    { "name": "Debug", "kind": "constant", "file": "enums.go", "line": 12 },
+    { "name": "Info", "kind": "constant", "file": "enums.go", "line": 12 },
+    { "name": "Warn", "kind": "constant", "file": "enums.go", "line": 12 },
+    { "name": "Error", "kind": "constant", "file": "enums.go", "line": 12 },
+    { "name": "String", "kind": "method", "file": "enums.go", "line": 19 }
+  ]
+}

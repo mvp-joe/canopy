@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "ascending", "kind": "function", "file": "callbacks.c", "line": 4 },
+    { "name": "descending", "kind": "function", "file": "callbacks.c", "line": 8 },
+    { "name": "sort_pair", "kind": "function", "file": "callbacks.c", "line": 12 },
+    { "name": "main", "kind": "function", "file": "callbacks.c", "line": 20 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "sort_pair" }
+  ]
+}

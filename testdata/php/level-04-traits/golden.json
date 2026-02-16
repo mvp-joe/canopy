@@ -1,0 +1,10 @@
+{
+  "definitions": [
+    { "name": "Loggable", "kind": "trait", "file": "traits.php", "line": 2 },
+    { "name": "log", "kind": "method", "file": "traits.php", "line": 3 },
+    { "name": "Timestamped", "kind": "trait", "file": "traits.php", "line": 8 },
+    { "name": "timestamp", "kind": "method", "file": "traits.php", "line": 9 },
+    { "name": "Service", "kind": "class", "file": "traits.php", "line": 14 },
+    { "name": "run", "kind": "method", "file": "traits.php", "line": 18 }
+  ]
+}

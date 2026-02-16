@@ -1,0 +1,8 @@
+{
+  "definitions": [
+    { "name": "MathHelper", "kind": "class", "file": "statics.php", "line": 2 },
+    { "name": "add", "kind": "method", "file": "statics.php", "line": 5 },
+    { "name": "multiply", "kind": "method", "file": "statics.php", "line": 9 },
+    { "name": "calculate", "kind": "function", "file": "statics.php", "line": 14 }
+  ]
+}

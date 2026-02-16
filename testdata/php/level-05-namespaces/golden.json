@@ -1,0 +1,9 @@
+{
+  "definitions": [
+    { "name": "App\\Models", "kind": "namespace", "file": "models.php", "line": 2 },
+    { "name": "User", "kind": "class", "file": "models.php", "line": 4 },
+    { "name": "__construct", "kind": "method", "file": "models.php", "line": 7 },
+    { "name": "getName", "kind": "method", "file": "models.php", "line": 11 },
+    { "name": "createUser", "kind": "function", "file": "models.php", "line": 16 }
+  ]
+}

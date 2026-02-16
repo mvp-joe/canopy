@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "embed", "kind": "package", "file": "embed.go", "line": 0 },
+    { "name": "Reader", "kind": "interface", "file": "embed.go", "line": 2 },
+    { "name": "Writer", "kind": "interface", "file": "embed.go", "line": 6 },
+    { "name": "ReadWriter", "kind": "interface", "file": "embed.go", "line": 10 },
+    { "name": "MyReader", "kind": "struct", "file": "embed.go", "line": 15 },
+    { "name": "Read", "kind": "method", "file": "embed.go", "line": 19 },
+    { "name": "MyReadWriter", "kind": "struct", "file": "embed.go", "line": 23 },
+    { "name": "Write", "kind": "method", "file": "embed.go", "line": 28 }
+  ],
+  "implementations": [
+    { "type": "MyReader", "interface": "Reader" },
+    { "type": "MyReadWriter", "interface": "Writer" }
+  ]
+}
