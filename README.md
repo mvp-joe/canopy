@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/canopy.png" alt="Canopy" width="256" />
+  <img src="assets/canopy.png" alt="Canopy" width="400" />
 </p>
 
 # Canopy
