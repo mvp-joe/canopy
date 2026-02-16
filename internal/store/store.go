@@ -212,6 +212,13 @@ CREATE TABLE IF NOT EXISTS type_compositions (
   composition_kind TEXT NOT NULL
 );
 
+-- Metadata
+
+CREATE TABLE IF NOT EXISTS metadata (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- Indexes
 
 CREATE INDEX IF NOT EXISTS idx_files_language ON files(language);
@@ -245,6 +252,28 @@ CREATE INDEX IF NOT EXISTS idx_extension_bindings_type ON extension_bindings(ext
 CREATE INDEX IF NOT EXISTS idx_type_compositions_composite ON type_compositions(composite_symbol_id);
 CREATE INDEX IF NOT EXISTS idx_type_compositions_component ON type_compositions(component_symbol_id);
 `
+
+// GetMetadata returns the value for a metadata key, or empty string if not found.
+func (s *Store) GetMetadata(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM metadata WHERE key = ?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get metadata %q: %w", key, err)
+	}
+	return value, nil
+}
+
+// SetMetadata upserts a metadata key-value pair.
+func (s *Store) SetMetadata(key, value string) error {
+	_, err := s.db.Exec("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", key, value)
+	if err != nil {
+		return fmt.Errorf("set metadata %q: %w", key, err)
+	}
+	return nil
+}
 
 // DeleteFileData transactionally removes all data for a file across all 16 tables.
 // Deletes in reverse-dependency order to respect FK constraints.

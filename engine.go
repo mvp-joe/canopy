@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,67 @@ func (e *Engine) Close() error {
 // Store returns the underlying Store for direct access.
 func (e *Engine) Store() *store.Store {
 	return e.store
+}
+
+// scriptsHash computes a SHA-256 hash of all Risor scripts (extract, resolve, lib).
+// Walks the scriptsFS or scriptsDir to find all .risor files, sorts them by path,
+// and hashes their concatenated contents. Returns hex-encoded hash string.
+func (e *Engine) scriptsHash() string {
+	var paths []string
+
+	if e.scriptsFS != nil {
+		fs.WalkDir(e.scriptsFS, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(path, ".risor") {
+				paths = append(paths, path)
+			}
+			return nil
+		})
+	} else if e.scriptsDir != "" {
+		filepath.WalkDir(e.scriptsDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !d.IsDir() && strings.HasSuffix(path, ".risor") {
+				rel, _ := filepath.Rel(e.scriptsDir, path)
+				paths = append(paths, rel)
+			}
+			return nil
+		})
+	}
+
+	sort.Strings(paths)
+
+	h := sha256.New()
+	for _, p := range paths {
+		src, err := e.runtime.LoadScript(p)
+		if err != nil {
+			continue
+		}
+		h.Write([]byte(p))
+		h.Write([]byte(src))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// ScriptsChanged reports whether the embedded scripts differ from what was
+// used to build the current database. Returns true if the DB has no stored
+// hash (first run) or if the hash doesn't match. When true, the caller
+// should delete the DB and reindex from scratch.
+func (e *Engine) ScriptsChanged() bool {
+	current := e.scriptsHash()
+	stored, err := e.store.GetMetadata("scripts_hash")
+	if err != nil || stored == "" {
+		return true
+	}
+	return current != stored
+}
+
+// storeScriptsHash persists the current scripts hash to the database.
+func (e *Engine) storeScriptsHash() {
+	_ = e.store.SetMetadata("scripts_hash", e.scriptsHash())
 }
 
 // Query returns a new QueryBuilder wrapping the Store.
@@ -554,6 +616,10 @@ func (e *Engine) Resolve(ctx context.Context) error {
 	if len(errs) > 0 {
 		return fmt.Errorf("resolution had %d error(s): %w", len(errs), errs[0])
 	}
+
+	// Store the current scripts hash so future runs can detect changes.
+	e.storeScriptsHash()
+
 	return nil
 }
 

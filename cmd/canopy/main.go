@@ -123,6 +123,20 @@ func runIndex(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("creating engine: %w", err)
 	}
+
+	// Detect script changes: if the embedded scripts differ from what built
+	// the DB, wipe and rebuild from scratch (same as --force).
+	if !flagForce && engine.ScriptsChanged() {
+		engine.Close()
+		if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing database for script change: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Scripts changed, rebuilding database\n")
+		engine, err = canopy.New(dbPath, scriptsDir, opts...)
+		if err != nil {
+			return fmt.Errorf("recreating engine: %w", err)
+		}
+	}
 	defer engine.Close()
 
 	ctx := context.Background()

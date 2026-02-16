@@ -1,39 +1,31 @@
 # Stale DB after script upgrade shows empty resolution data
 
-**Status: OPEN**
+**Status: RESOLVED**
 
 ## Summary
 
-When canopy resolution scripts are updated (e.g. implementation matching logic
-added or improved), an incremental `canopy index` correctly detects no source
-file changes and skips resolution entirely. This preserves old (possibly empty)
-resolution data from the prior script version. The user must know to run
-`canopy index --force` to pick up script changes.
+When canopy scripts changed (new binary with updated extract/resolve scripts),
+an incremental `canopy index` would skip re-processing because no source files
+changed. This left stale extraction and resolution data from the prior script
+version.
 
-This is technically correct behavior but surprising — a user upgrades canopy,
-re-runs index, and wonders why new resolution features produce no data.
+## Fix
 
-## Repro
+Added automatic script change detection:
 
-```bash
-# Build DB with current canopy:
-canopy index ../project-cortex --force
-# Verify implementations exist:
-canopy query symbols --db ../project-cortex/.canopy/index.db --kind interface --format text
-# Pick an interface, confirm it has implementors
+1. **Metadata table** (`internal/store/store.go`): New `metadata` key-value
+   table with `GetMetadata`/`SetMetadata` methods.
 
-# Now re-run without --force (simulating "scripts changed but files didn't"):
-canopy index ../project-cortex
-# Output: "resolve: 0s" — resolution was skipped
-# All resolution data is unchanged (fine if scripts didn't change,
-# but stale if they did)
-```
+2. **Scripts hash** (`engine.go`): `scriptsHash()` walks all embedded `.risor`
+   files (extract + resolve + lib), sorts by path, and SHA-256 hashes their
+   concatenated contents. `ScriptsChanged()` compares this against the stored
+   `scripts_hash` in the DB.
 
-## Possible fix
+3. **CLI auto-rebuild** (`cmd/canopy/main.go`): Before indexing, checks
+   `engine.ScriptsChanged()`. If true, deletes the DB and recreates the engine
+   (same as `--force`), printing "Scripts changed, rebuilding database".
 
-Track a hash of resolution script contents in the DB (e.g. a `metadata` table
-with `scripts_hash`). On index, compute the current scripts hash. If it differs
-from the stored hash, force a full re-resolve even if no source files changed.
+4. **Hash persistence**: After successful resolution, `storeScriptsHash()`
+   saves the current hash to the metadata table.
 
-This would be transparent to the user — upgrading canopy automatically
-triggers re-resolution on the next index.
+Works with both embedded FS (`go:embed`) and `--scripts-dir` disk scripts.
