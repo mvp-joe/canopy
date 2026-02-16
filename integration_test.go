@@ -385,3 +385,244 @@ func hello() {}
 	// Same file ID means it was not re-inserted.
 	assert.Equal(t, id1, f2.ID)
 }
+
+// =============================================================================
+// Self-indexing discovery API test
+// =============================================================================
+
+// containsSymbolNamed checks if any SymbolResult in items has the given name.
+func containsSymbolNamed(items []SymbolResult, name string) bool {
+	for _, item := range items {
+		if item.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDiscovery_SelfIndex indexes canopy's own source files and exercises
+// every discovery API method against real extraction output.
+func TestDiscovery_SelfIndex(t *testing.T) {
+	e := newIntegrationEngine(t, WithLanguages("go"))
+	ctx := context.Background()
+	modRoot := findModuleRoot(t)
+
+	// Index a curated set of canopy's own Go files.
+	files := []string{
+		filepath.Join(modRoot, "engine.go"),
+		filepath.Join(modRoot, "query.go"),
+		filepath.Join(modRoot, "query_discovery.go"),
+		filepath.Join(modRoot, "internal", "store", "store.go"),
+		filepath.Join(modRoot, "internal", "store", "types.go"),
+		filepath.Join(modRoot, "internal", "store", "extraction.go"),
+	}
+	require.NoError(t, e.IndexFiles(ctx, files))
+	require.NoError(t, e.Resolve(ctx))
+
+	q := e.Query()
+
+	t.Run("Symbols_NoFilter", func(t *testing.T) {
+		result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "should find symbols in canopy source")
+		// Every item should have a non-empty name
+		for _, item := range result.Items {
+			assert.NotEmpty(t, item.Name)
+		}
+	})
+
+	t.Run("Symbols_FilterByKind_Struct", func(t *testing.T) {
+		result, err := q.Symbols(SymbolFilter{Kinds: []string{"struct"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0)
+		// Should find key structs
+		assert.True(t, containsSymbolNamed(result.Items, "Engine"), "should find Engine struct")
+		assert.True(t, containsSymbolNamed(result.Items, "Store"), "should find Store struct")
+		assert.True(t, containsSymbolNamed(result.Items, "QueryBuilder"), "should find QueryBuilder struct")
+		assert.True(t, containsSymbolNamed(result.Items, "Symbol"), "should find Symbol struct")
+		// All should be structs
+		for _, item := range result.Items {
+			assert.Equal(t, "struct", item.Kind)
+		}
+	})
+
+	t.Run("Symbols_FilterByKind_Function", func(t *testing.T) {
+		result, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0)
+		assert.True(t, containsSymbolNamed(result.Items, "New"), "should find New() engine constructor")
+		for _, item := range result.Items {
+			assert.Equal(t, "function", item.Kind)
+		}
+	})
+
+	t.Run("Symbols_FilterByVisibility_Public", func(t *testing.T) {
+		vis := "public"
+		result, err := q.Symbols(SymbolFilter{Visibility: &vis}, Sort{}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0)
+		for _, item := range result.Items {
+			assert.Equal(t, "public", item.Visibility)
+		}
+	})
+
+	t.Run("Symbols_FilterByPathPrefix", func(t *testing.T) {
+		// Use absolute path prefix since we indexed absolute paths
+		storePrefix := filepath.Join(modRoot, "internal", "store") + "/"
+		result, err := q.Symbols(SymbolFilter{PathPrefix: &storePrefix}, Sort{}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "should find symbols in internal/store/")
+		// All results should have file paths under internal/store/
+		for _, item := range result.Items {
+			assert.Contains(t, item.FilePath, "internal/store/",
+				"symbol %s should be in internal/store/, got %s", item.Name, item.FilePath)
+		}
+	})
+
+	t.Run("Files_NoFilter", func(t *testing.T) {
+		result, err := q.Files("", "", Sort{Field: SortByFile, Order: Asc}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 6, result.TotalCount, "should have indexed exactly 6 files")
+	})
+
+	t.Run("Files_FilterByLanguage", func(t *testing.T) {
+		result, err := q.Files("", "go", Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 6, result.TotalCount, "all indexed files are Go")
+	})
+
+	t.Run("Files_FilterByPathPrefix", func(t *testing.T) {
+		storePrefix := filepath.Join(modRoot, "internal", "store")
+		result, err := q.Files(storePrefix, "", Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.TotalCount, "should find 3 store files")
+	})
+
+	t.Run("Packages", func(t *testing.T) {
+		result, err := q.Packages("", Sort{Field: SortByName, Order: Asc}, Pagination{})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "should find package symbols")
+		// Should find the store and canopy packages
+		assert.True(t, containsSymbolNamed(result.Items, "store"), "should find store package")
+		assert.True(t, containsSymbolNamed(result.Items, "canopy"), "should find canopy package")
+		// All should be package kinds
+		for _, item := range result.Items {
+			assert.Contains(t, []string{"package", "module", "namespace"}, item.Kind)
+		}
+	})
+
+	t.Run("SearchSymbols_Prefix", func(t *testing.T) {
+		result, err := q.SearchSymbols("Query*", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "Query* should match something")
+		assert.True(t, containsSymbolNamed(result.Items, "QueryBuilder"), "should find QueryBuilder")
+	})
+
+	t.Run("SearchSymbols_Contains", func(t *testing.T) {
+		result, err := q.SearchSymbols("*Store*", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "*Store* should match something")
+		assert.True(t, containsSymbolNamed(result.Items, "Store"), "should find Store")
+		assert.True(t, containsSymbolNamed(result.Items, "NewStore"), "should find NewStore")
+	})
+
+	t.Run("SearchSymbols_ExactMatch", func(t *testing.T) {
+		result, err := q.SearchSymbols("New", SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Greater(t, result.TotalCount, 0, "exact match 'New' should find the constructor")
+		assert.True(t, containsSymbolNamed(result.Items, "New"))
+	})
+
+	t.Run("SearchSymbols_WithKindFilter", func(t *testing.T) {
+		result, err := q.SearchSymbols("*Engine*", SymbolFilter{Kinds: []string{"struct"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(result.Items, "Engine"))
+		// All results should be structs
+		for _, item := range result.Items {
+			assert.Equal(t, "struct", item.Kind)
+		}
+	})
+
+	t.Run("ProjectSummary", func(t *testing.T) {
+		summary, err := q.ProjectSummary(5)
+		require.NoError(t, err)
+
+		// Should have Go language stats
+		require.NotEmpty(t, summary.Languages)
+		assert.Equal(t, "go", summary.Languages[0].Language)
+		assert.Equal(t, 6, summary.Languages[0].FileCount)
+		assert.Greater(t, summary.Languages[0].SymbolCount, 0)
+
+		// Should have kind counts for real Go kinds
+		kindCounts := summary.Languages[0].KindCounts
+		assert.Greater(t, kindCounts["function"], 0, "should have functions")
+		assert.Greater(t, kindCounts["struct"], 0, "should have structs")
+		assert.Greater(t, kindCounts["package"], 0, "should have package symbols")
+
+		// Package count
+		assert.Greater(t, summary.PackageCount, 0)
+
+		// Top symbols should have ref counts after resolution
+		if len(summary.TopSymbols) > 0 {
+			assert.Greater(t, summary.TopSymbols[0].RefCount, 0,
+				"top symbol should have ref count > 0 after resolution")
+		}
+	})
+
+	t.Run("PackageSummary_Store", func(t *testing.T) {
+		storePrefix := filepath.Join(modRoot, "internal", "store")
+		summary, err := q.PackageSummary(storePrefix, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, "store", summary.Symbol.Name)
+		assert.Equal(t, 3, summary.FileCount, "store has 3 indexed files")
+
+		// Should have exported symbols
+		assert.Greater(t, len(summary.ExportedSymbols), 0, "store should have exported symbols")
+		// Check for specific exports
+		exportNames := make([]string, len(summary.ExportedSymbols))
+		for i, sym := range summary.ExportedSymbols {
+			exportNames[i] = sym.Name
+		}
+		assert.Contains(t, exportNames, "Store", "should export Store")
+		assert.Contains(t, exportNames, "NewStore", "should export NewStore")
+		assert.Contains(t, exportNames, "Symbol", "should export Symbol")
+
+		// Kind counts should be populated
+		assert.Greater(t, len(summary.KindCounts), 0)
+
+		// Dependencies (imports from store files)
+		assert.Greater(t, len(summary.Dependencies), 0, "store should have imports")
+	})
+
+	t.Run("Pagination_Across_Real_Data", func(t *testing.T) {
+		// Get total count
+		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		total := all.TotalCount
+
+		// Page through results and collect all names
+		var allNames []string
+		for offset := 0; offset < total; offset += 10 {
+			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: 10})
+			require.NoError(t, err)
+			assert.Equal(t, total, page.TotalCount, "total count should be stable across pages")
+			for _, item := range page.Items {
+				allNames = append(allNames, item.Name)
+			}
+		}
+		assert.Equal(t, total, len(allNames), "paginating through all pages should yield total count items")
+	})
+
+	t.Run("Sort_RefCount_Real_Data", func(t *testing.T) {
+		result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: 10})
+		require.NoError(t, err)
+		// Results should be in descending ref count order
+		for i := 1; i < len(result.Items); i++ {
+			assert.GreaterOrEqual(t, result.Items[i-1].RefCount, result.Items[i].RefCount,
+				"ref count should be descending: %s(%d) >= %s(%d)",
+				result.Items[i-1].Name, result.Items[i-1].RefCount,
+				result.Items[i].Name, result.Items[i].RefCount)
+		}
+	})
+}
