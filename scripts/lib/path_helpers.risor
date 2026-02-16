@@ -3,21 +3,17 @@
 // Import with:
 //   from "lib/path_helpers" import normalize_source, get_basename, strip_extension
 
+import filepath
+import strings
+
 // normalize_source strips leading ./ from an import source path and removes extensions.
 func normalize_source(source) {
-  result := source
-  if len(result) >= 2 && result[0] == "." && result[1] == "/" {
-    result = result[2:]
-  }
-  // Strip common extensions
+  result := strings.trim_prefix(source, "./")
   extensions := [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]
   for _, ext := range extensions {
-    if len(result) > len(ext) {
-      end := result[len(result) - len(ext):]
-      if end == ext {
-        result = result[:len(result) - len(ext)]
-        break
-      }
+    if strings.has_suffix(result, ext) {
+      result = strings.trim_suffix(result, ext)
+      break
     }
   }
   return result
@@ -25,39 +21,14 @@ func normalize_source(source) {
 
 // get_basename extracts the last path component from a file path.
 func get_basename(path) {
-  parts := []
-  current := ""
-  for i := 0; i < len(path); i++ {
-    ch := path[i]
-    if ch == "/" {
-      if current != "" {
-        parts = parts.append(current)
-      }
-      current = ""
-    } else {
-      current = current + ch
-    }
-  }
-  if current != "" {
-    parts = parts.append(current)
-  }
-  if len(parts) == 0 {
-    return path
-  }
-  return parts[len(parts) - 1]
+  return filepath.base(path)
 }
 
 // strip_extension removes file extension from a basename.
 func strip_extension(basename) {
-  // Find last dot
-  last_dot := -1
-  for i := 0; i < len(basename); i++ {
-    if basename[i] == "." {
-      last_dot = i
-    }
-  }
-  if last_dot > 0 {
-    return basename[:last_dot]
+  ext := filepath.ext(basename)
+  if ext != "" {
+    return strings.trim_suffix(basename, ext)
   }
   return basename
 }

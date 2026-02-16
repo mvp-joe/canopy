@@ -9,6 +9,8 @@
 //   insert_call_edge, insert_extension_binding
 //   db_query, log
 
+import strings
+
 from "lib/resolve_helpers" import find_scope_for_ref, find_caller_symbol_id, create_call_edges
 
 // ========== Helper functions (define-before-use) ==========
@@ -26,11 +28,7 @@ func find_package_name(file_symbols) {
 
 // strip_pointer removes leading * from a type expression.
 func strip_pointer(type_expr) {
-  result := type_expr
-  for len(result) > 0 && result[0] == "*" {
-    result = result[1:]
-  }
-  return result
+  return strings.trim(type_expr, "*")
 }
 
 // ========== Main resolution pipeline ==========
