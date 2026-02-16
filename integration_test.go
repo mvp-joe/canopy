@@ -626,3 +626,282 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 		}
 	})
 }
+
+// =============================================================================
+// Incremental update discovery tests
+// =============================================================================
+
+// TestDiscovery_Incremental tests that the discovery API returns correct results
+// after files are added, modified, and have symbols removed, using the full
+// pipeline: IndexFiles → Resolve → discovery queries.
+func TestDiscovery_Incremental(t *testing.T) {
+	e := newIntegrationEngine(t, WithLanguages("go"))
+	ctx := context.Background()
+	dir := t.TempDir()
+	q := e.Query()
+
+	// --- Phase 1: Initial state — two files, cross-file reference ---
+
+	libPath := filepath.Join(dir, "lib.go")
+	require.NoError(t, os.WriteFile(libPath, []byte(`package main
+
+type Server struct {
+	Host string
+	Port int
+}
+
+func NewServer() *Server {
+	return &Server{Host: "localhost", Port: 8080}
+}
+
+func (s *Server) Start() error {
+	return nil
+}
+`), 0644))
+
+	mainPath := filepath.Join(dir, "main.go")
+	require.NoError(t, os.WriteFile(mainPath, []byte(`package main
+
+func main() {
+	s := NewServer()
+	s.Start()
+}
+`), 0644))
+
+	require.NoError(t, e.IndexFiles(ctx, []string{libPath, mainPath}))
+	require.NoError(t, e.Resolve(ctx))
+
+	t.Run("Phase1_InitialState", func(t *testing.T) {
+		// Files: 2 files
+		files, err := q.Files("", "", Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 2, files.TotalCount)
+
+		// Symbols: should find Server, NewServer, Start, main
+		structs, err := q.Symbols(SymbolFilter{Kinds: []string{"struct"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(structs.Items, "Server"))
+
+		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(funcs.Items, "NewServer"))
+		assert.True(t, containsSymbolNamed(funcs.Items, "main"))
+
+		// Search for *Server* — should find Server, NewServer
+		search, err := q.SearchSymbols("*Server*", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(search.Items, "Server"))
+		assert.True(t, containsSymbolNamed(search.Items, "NewServer"))
+
+		// ProjectSummary
+		summary, err := q.ProjectSummary(10)
+		require.NoError(t, err)
+		assert.Equal(t, 2, summary.Languages[0].FileCount)
+
+		// NewServer should have ref count > 0 (called from main)
+		serverSearch, err := q.SearchSymbols("NewServer", SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		require.Len(t, serverSearch.Items, 1)
+		assert.Greater(t, serverSearch.Items[0].RefCount, 0,
+			"NewServer should have references from main.go")
+	})
+
+	// --- Phase 2: Add a new file ---
+
+	utilPath := filepath.Join(dir, "util.go")
+	require.NoError(t, os.WriteFile(utilPath, []byte(`package main
+
+func FormatAddr(host string, port int) string {
+	return host + ":" + string(rune(port))
+}
+
+func Validate(s *Server) bool {
+	return s.Host != "" && s.Port > 0
+}
+`), 0644))
+
+	require.NoError(t, e.IndexFiles(ctx, []string{utilPath}))
+	require.NoError(t, e.Resolve(ctx))
+
+	t.Run("Phase2_AddFile", func(t *testing.T) {
+		// Files: now 3
+		files, err := q.Files("", "", Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 3, files.TotalCount)
+
+		// New functions should be discoverable
+		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: 100})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(funcs.Items, "FormatAddr"), "new function should appear")
+		assert.True(t, containsSymbolNamed(funcs.Items, "Validate"), "new function should appear")
+
+		// Old symbols still present
+		assert.True(t, containsSymbolNamed(funcs.Items, "NewServer"), "old function should persist")
+		assert.True(t, containsSymbolNamed(funcs.Items, "main"), "old function should persist")
+
+		// Search finds new function
+		search, err := q.SearchSymbols("Format*", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(search.Items, "FormatAddr"))
+
+		// ProjectSummary reflects 3 files
+		summary, err := q.ProjectSummary(10)
+		require.NoError(t, err)
+		assert.Equal(t, 3, summary.Languages[0].FileCount)
+	})
+
+	// --- Phase 3: Modify a file — rename function, add struct ---
+
+	require.NoError(t, os.WriteFile(libPath, []byte(`package main
+
+type Server struct {
+	Host string
+	Port int
+}
+
+type Config struct {
+	Debug bool
+}
+
+func CreateServer() *Server {
+	return &Server{Host: "localhost", Port: 8080}
+}
+
+func (s *Server) Start() error {
+	return nil
+}
+`), 0644))
+
+	require.NoError(t, e.IndexFiles(ctx, []string{libPath}))
+	require.NoError(t, e.Resolve(ctx))
+
+	t.Run("Phase3_ModifyFile", func(t *testing.T) {
+		// NewServer should be gone, CreateServer should exist
+		search, err := q.SearchSymbols("NewServer", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.False(t, containsSymbolNamed(search.Items, "NewServer"),
+			"renamed function should be gone")
+
+		search, err = q.SearchSymbols("CreateServer", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(search.Items, "CreateServer"),
+			"new function name should appear")
+
+		// New struct Config should be discoverable
+		structs, err := q.Symbols(SymbolFilter{Kinds: []string{"struct"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(structs.Items, "Config"), "new struct should appear")
+		assert.True(t, containsSymbolNamed(structs.Items, "Server"), "old struct should persist")
+
+		// ProjectSummary struct count should increase
+		summary, err := q.ProjectSummary(10)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, summary.Languages[0].KindCounts["struct"], 2,
+			"should have at least Server and Config")
+
+		// main.go still calls NewServer() which no longer exists —
+		// after resolution, NewServer ref from main.go should not resolve
+		// (CreateServer won't have refs from main.go since main.go still says NewServer)
+		createSearch, err := q.SearchSymbols("CreateServer", SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		require.Len(t, createSearch.Items, 1)
+		assert.Equal(t, 0, createSearch.Items[0].RefCount,
+			"CreateServer should have 0 refs since main.go still calls NewServer")
+	})
+
+	// --- Phase 4: Update caller to match renamed function ---
+
+	require.NoError(t, os.WriteFile(mainPath, []byte(`package main
+
+func main() {
+	s := CreateServer()
+	s.Start()
+	FormatAddr(s.Host, s.Port)
+}
+`), 0644))
+
+	require.NoError(t, e.IndexFiles(ctx, []string{mainPath}))
+	require.NoError(t, e.Resolve(ctx))
+
+	t.Run("Phase4_UpdateCaller", func(t *testing.T) {
+		// CreateServer should now have refs
+		search, err := q.SearchSymbols("CreateServer", SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		require.Len(t, search.Items, 1)
+		assert.Greater(t, search.Items[0].RefCount, 0,
+			"CreateServer should now have references from updated main.go")
+
+		// FormatAddr should also have refs now
+		search, err = q.SearchSymbols("FormatAddr", SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		require.Len(t, search.Items, 1)
+		assert.Greater(t, search.Items[0].RefCount, 0,
+			"FormatAddr should have references from main.go")
+
+		// Top symbols should include referenced functions
+		summary, err := q.ProjectSummary(20)
+		require.NoError(t, err)
+		assert.Greater(t, len(summary.TopSymbols), 0, "should have symbols with refs")
+	})
+
+	// --- Phase 5: Remove symbols from a file ---
+
+	require.NoError(t, os.WriteFile(utilPath, []byte(`package main
+
+func FormatAddr(host string, port int) string {
+	return host + ":" + string(rune(port))
+}
+`), 0644))
+
+	require.NoError(t, e.IndexFiles(ctx, []string{utilPath}))
+	require.NoError(t, e.Resolve(ctx))
+
+	t.Run("Phase5_RemoveSymbols", func(t *testing.T) {
+		// Validate should be gone
+		search, err := q.SearchSymbols("Validate", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.False(t, containsSymbolNamed(search.Items, "Validate"),
+			"removed function should be gone")
+
+		// FormatAddr should still exist
+		search, err = q.SearchSymbols("FormatAddr", SymbolFilter{}, Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.True(t, containsSymbolNamed(search.Items, "FormatAddr"),
+			"kept function should persist")
+
+		// Total function count should have decreased
+		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: 100})
+		require.NoError(t, err)
+		assert.False(t, containsSymbolNamed(funcs.Items, "Validate"))
+	})
+
+	// --- Phase 6: Final consistency check ---
+
+	t.Run("Phase6_FinalConsistency", func(t *testing.T) {
+		// Files still 3
+		files, err := q.Files("", "", Sort{}, Pagination{})
+		require.NoError(t, err)
+		assert.Equal(t, 3, files.TotalCount)
+
+		// Pagination should be consistent with total
+		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		require.NoError(t, err)
+		total := all.TotalCount
+
+		var collected int
+		for offset := 0; offset < total; offset += 5 {
+			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: 5})
+			require.NoError(t, err)
+			assert.Equal(t, total, page.TotalCount)
+			collected += len(page.Items)
+		}
+		assert.Equal(t, total, collected, "pagination should cover all symbols")
+
+		// Sort by ref count should still work
+		sorted, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: 10})
+		require.NoError(t, err)
+		for i := 1; i < len(sorted.Items); i++ {
+			assert.GreaterOrEqual(t, sorted.Items[i-1].RefCount, sorted.Items[i].RefCount)
+		}
+	})
+}
