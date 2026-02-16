@@ -336,10 +336,10 @@ func runDeps(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	depsCount := len(cliImports)
+	paged, depsCount := paginateSlice(cliImports)
 	return outputResult(CLIResult{
 		Command:    "deps",
-		Results:    cliImports,
+		Results:    paged,
 		TotalCount: &depsCount,
 	})
 }
@@ -376,10 +376,10 @@ func runDependents(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	depCount := len(cliImports)
+	paged, depCount := paginateSlice(cliImports)
 	return outputResult(CLIResult{
 		Command:    "dependents",
-		Results:    cliImports,
+		Results:    paged,
 		TotalCount: &depCount,
 	})
 }

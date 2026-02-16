@@ -20,9 +20,9 @@ type CLISymbol struct {
 	StartCol         int      `json:"start_col"`
 	EndLine          int      `json:"end_line"`
 	EndCol           int      `json:"end_col"`
-	RefCount         int      `json:"ref_count,omitempty"`
-	ExternalRefCount int      `json:"external_ref_count,omitempty"`
-	InternalRefCount int      `json:"internal_ref_count,omitempty"`
+	RefCount         int      `json:"ref_count"`
+	ExternalRefCount int      `json:"external_ref_count"`
+	InternalRefCount int      `json:"internal_ref_count"`
 }
 
 // CLILocation extends Location with the symbol ID for chaining.

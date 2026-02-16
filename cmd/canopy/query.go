@@ -165,6 +165,31 @@ func buildPagination() canopy.Pagination {
 	}
 }
 
+// paginateSlice applies CLI --limit and --offset flags to a slice.
+// Returns (paginated slice, total count before pagination).
+func paginateSlice[T any](items []T) ([]T, int) {
+	total := len(items)
+	offset := flagOffset
+	limit := flagLimit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(items) {
+		return []T{}, total
+	}
+	items = items[offset:]
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, total
+}
+
 // buildSort creates a Sort from CLI flags.
 func buildSort() canopy.Sort {
 	var field canopy.SortField
@@ -407,11 +432,11 @@ func runReferences(cmd *cobra.Command, args []string) error {
 		cliLocs[i] = locationToCLI(loc, &symID)
 	}
 
-	refCount := len(cliLocs)
+	paged, totalCount := paginateSlice(cliLocs)
 	return outputResult(CLIResult{
 		Command:    "references",
-		Results:    cliLocs,
-		TotalCount: &refCount,
+		Results:    paged,
+		TotalCount: &totalCount,
 	})
 }
 
@@ -458,10 +483,10 @@ func runCallers(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	callerCount := len(cliEdges)
+	paged, callerCount := paginateSlice(cliEdges)
 	return outputResult(CLIResult{
 		Command:    "callers",
-		Results:    cliEdges,
+		Results:    paged,
 		TotalCount: &callerCount,
 	})
 }
@@ -509,10 +534,10 @@ func runCallees(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	calleeCount := len(cliEdges)
+	paged, calleeCount := paginateSlice(cliEdges)
 	return outputResult(CLIResult{
 		Command:    "callees",
-		Results:    cliEdges,
+		Results:    paged,
 		TotalCount: &calleeCount,
 	})
 }
@@ -556,10 +581,10 @@ func runImplementations(cmd *cobra.Command, args []string) error {
 		cliLocs[i] = locationToCLI(loc, implSymID)
 	}
 
-	implCount := len(cliLocs)
+	paged, implCount := paginateSlice(cliLocs)
 	return outputResult(CLIResult{
 		Command:    "implementations",
-		Results:    cliLocs,
+		Results:    paged,
 		TotalCount: &implCount,
 	})
 }

@@ -1,8 +1,10 @@
 package canopy
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
+	"os"
 
 	"github.com/jward/canopy/internal/store"
 )
@@ -38,6 +40,20 @@ func (q *QueryBuilder) SymbolAt(file string, line, col int) (*store.Symbol, erro
 	}
 	if f == nil {
 		return nil, nil
+	}
+
+	// Validate line/col against actual file content if available.
+	// Without this, multi-line symbols match any column on their start line
+	// because the SQL only checks start_col <= col (with no upper bound).
+	if content, err := os.ReadFile(file); err == nil {
+		fileLines := bytes.Split(content, []byte{'\n'})
+		if line >= len(fileLines) {
+			return nil, nil
+		}
+		lineContent := bytes.TrimRight(fileLines[line], "\r")
+		if col >= len(lineContent) {
+			return nil, nil
+		}
 	}
 
 	// Find all symbols containing this position, ordered by span size (narrowest first).

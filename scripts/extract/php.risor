@@ -399,6 +399,35 @@ for _, m := range use_matches {
   }
 }
 
+// --- require/require_once/include/include_once ---
+include_kinds := ["include_expression", "include_once_expression", "require_expression", "require_once_expression"]
+for _, ik := range include_kinds {
+  inc_matches := query("(" + ik + ") @inc", root)
+  for _, m := range inc_matches {
+    inc_node := m["inc"]
+    // The argument is typically a string child
+    arg_count := int(inc_node.NamedChildCount())
+    for i := 0; i < arg_count; i++ {
+      child := inc_node.NamedChild(i)
+      ct := child.Type()
+      if ct == "string" || ct == "encapsed_string" {
+        raw := node_text(child)
+        // Strip quotes
+        source := strings.trim_prefix(raw, "'")
+        source = strings.trim_suffix(source, "'")
+        source = strings.trim_prefix(source, "\"")
+        source = strings.trim_suffix(source, "\"")
+        insert_import({
+          file_id: file_id,
+          source: source,
+          kind: "file",
+          scope: "file",
+        })
+      }
+    }
+  }
+}
+
 // --- Top-level const declarations ---
 toplevel_const_matches := query("(const_declaration (const_element (name) @name) @elem) @decl", root)
 for _, m := range toplevel_const_matches {
