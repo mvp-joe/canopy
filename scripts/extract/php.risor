@@ -115,12 +115,7 @@ func extract_params(sym_id, params_node) {
     param_name := ""
     if var_node != nil {
       raw := node_text(var_node)
-      // Strip leading $
-      if len(raw) > 0 && raw[0] == "$" {
-        param_name = raw[1:]
-      } else {
-        param_name = raw
-      }
+      param_name = strings.trim_prefix(raw, "$")
     }
 
     // Check for default value
@@ -251,10 +246,7 @@ func extract_properties(parent_sym_id, decl_list) {
     for _, em := range elem_matches {
       var_node := em["var"]
       raw := node_text(var_node)
-      prop_name := raw
-      if len(raw) > 0 && raw[0] == "$" {
-        prop_name = raw[1:]
-      }
+      prop_name := strings.trim_prefix(raw, "$")
 
       insert_type_member({
         symbol_id: parent_sym_id,
@@ -345,8 +337,7 @@ for _, m := range use_matches {
 
     // Check for alias (as clause)
     alias := ""
-    // The qualified_name contains the full path
-    source := strings.replace_all(full_text, "\\", "\\")
+    source := full_text
 
     imp := {
       file_id: file_id,

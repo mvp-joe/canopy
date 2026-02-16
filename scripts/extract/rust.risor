@@ -174,12 +174,9 @@ func extract_type_params(sym_id, container_node) {
       bounds_matches := query("(trait_bounds) @bounds", child)
       for _, bm := range bounds_matches {
         raw := node_text(bm["bounds"])
-        if strings.has_prefix(raw, ": ") {
-          constraint = raw[2:]
-        } else if strings.has_prefix(raw, ":") {
-          constraint = raw[1:]
-        } else {
-          constraint = raw
+        constraint = strings.trim_prefix(raw, ": ")
+        if constraint == raw {
+          constraint = strings.trim_prefix(raw, ":")
         }
       }
 

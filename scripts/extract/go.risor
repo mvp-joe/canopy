@@ -12,6 +12,7 @@
 //   symbols_by_name, symbols_by_file
 //   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
 
+import filepath
 import strings
 
 // ========== All function definitions first (Risor requires define-before-use) ==========
@@ -264,10 +265,9 @@ for _, m := range import_matches {
   path_node := m["path"]
 
   raw_path := node_text(path_node)
-  source := raw_path[1:len(raw_path)-1]
+  source := strings.trim(raw_path, "\"")
 
-  parts := strings.split(source, "/")
-  imported_name := parts[len(parts)-1]
+  imported_name := filepath.base(source)
 
   alias := ""
   alias_node := node_child(spec_node, "name")

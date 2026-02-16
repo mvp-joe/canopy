@@ -12,6 +12,7 @@
 //   symbols_by_name, symbols_by_file
 //   log        — log.Info(msg), log.Warn(msg), log.Error(msg)
 
+import filepath
 import strings
 
 // ========== All function definitions first (Risor requires define-before-use) ==========
@@ -252,10 +253,7 @@ func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
               arg := arg_list_node.NamedChild(j)
               if arg.Type() == "simple_symbol" {
                 sym_text := node_text(arg)
-                // Strip leading ':'
-                if len(sym_text) > 0 && sym_text[0] == ":" {
-                  sym_text = sym_text[1:]
-                }
+                sym_text = strings.trim_prefix(sym_text, ":")
                 insert_type_member({
                   symbol_id: parent_sym_id,
                   name: sym_text,
@@ -308,8 +306,7 @@ for _, m := range req_matches {
     }
 
     // Extract imported name (last segment)
-    parts := strings.split(source, "/")
-    imported_name := parts[len(parts)-1]
+    imported_name := filepath.base(source)
 
     insert_import({
       file_id: file_id,

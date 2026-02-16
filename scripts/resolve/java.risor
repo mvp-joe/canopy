@@ -9,6 +9,8 @@
 //   insert_call_edge, insert_extension_binding
 //   db_query, log
 
+import strings
+
 from "lib/resolve_helpers" import find_scope_for_ref, find_caller_symbol_id, create_call_edges
 
 // ========== Helper functions (define-before-use) ==========
@@ -26,16 +28,8 @@ func find_package_name(file_symbols) {
 // last_segment returns the last dot-separated segment of a string.
 // e.g. "com.example.Foo" -> "Foo"
 func last_segment(s) {
-  idx := -1
-  for i := 0; i < len(s); i++ {
-    if s[i] == "." {
-      idx = i
-    }
-  }
-  if idx >= 0 && idx < len(s) - 1 {
-    return s[idx + 1:]
-  }
-  return s
+  parts := strings.split(s, ".")
+  return parts[len(parts) - 1]
 }
 
 // ========== Main resolution pipeline ==========
@@ -279,15 +273,10 @@ for _, f := range resolve_files {
     // The import source is like "com.example.Foo". The package is everything
     // up to the last dot: "com.example". Find files declaring that package
     // which contain a symbol with this name.
+    parts := strings.split(imp_source, ".")
     pkg_part := imp_source
-    dot_idx := -1
-    for i := 0; i < len(imp_source); i++ {
-      if imp_source[i] == "." {
-        dot_idx = i
-      }
-    }
-    if dot_idx > 0 {
-      pkg_part = imp_source[:dot_idx]
+    if len(parts) > 1 {
+      pkg_part = strings.join(parts[:len(parts)-1], ".")
     }
 
     // Find files with matching package that have a symbol with the imported name

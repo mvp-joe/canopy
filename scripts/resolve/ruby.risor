@@ -9,6 +9,7 @@
 //   insert_call_edge, insert_extension_binding
 //   db_query, log
 
+import filepath
 import strings
 
 from "lib/resolve_helpers" import find_scope_for_ref, find_caller_symbol_id, create_call_edges
@@ -134,12 +135,8 @@ for _, f := range rb_files {
   fid := f["id"]
   path := f["path"]
   // Extract basename without extension
-  parts := strings.split(path, "/")
-  basename := parts[len(parts)-1]
-  // Strip .rb extension
-  if strings.has_suffix(basename, ".rb") {
-    basename = basename[:len(basename)-3]
-  }
+  basename := filepath.base(path)
+  basename = strings.trim_suffix(basename, ".rb")
   file_basename_map[basename] = fid
 }
 
@@ -236,8 +233,7 @@ for _, f := range resolve_files {
     source := imp["source"]
     // Try to match source against basenames
     // require "foo" matches foo.rb
-    src_parts := strings.split(source, "/")
-    src_base := src_parts[len(src_parts)-1]
+    src_base := filepath.base(source)
     if src_base in file_basename_map {
       required_file_ids = required_file_ids.append(file_basename_map[src_base])
     }

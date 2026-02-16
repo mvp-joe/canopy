@@ -184,13 +184,8 @@ for _, m := range include_matches {
   }
   raw_path := node_text(path_node)
   // Strip angle brackets or quotes
-  source := raw_path
-  if len(raw_path) >= 2 {
-    first := raw_path[0]
-    if first == "<" || first == "\"" {
-      source = raw_path[1:len(raw_path)-1]
-    }
-  }
+  source := strings.trim_prefix(strings.trim_suffix(raw_path, ">"), "<")
+  source = strings.trim(source, "\"")
 
   insert_import({
     file_id: file_id,
