@@ -814,6 +814,70 @@ func makeScopeChainFn(s *store.Store) *object.Builtin {
 	})
 }
 
+func makeBatchScopeChainsFn(s *store.Store) *object.Builtin {
+	return object.NewBuiltin("batch_scope_chains", func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 1 {
+			return object.NewArgsError("batch_scope_chains", 1, len(args))
+		}
+		fileID, err := toInt64(args[0])
+		if err != nil {
+			return object.Errorf("batch_scope_chains: %v", err)
+		}
+
+		scopes, queryErr := s.ScopesByFile(fileID)
+		if queryErr != nil {
+			return object.Errorf("batch_scope_chains: %v", queryErr)
+		}
+
+		// Build lookup map: scope ID → *Scope
+		byID := make(map[int64]*store.Scope, len(scopes))
+		for _, sc := range scopes {
+			byID[sc.ID] = sc
+		}
+
+		// Convert each scope to a Risor map (same format as makeScopeChainFn).
+		toRisorMap := func(sc *store.Scope) object.Object {
+			m := map[string]object.Object{
+				"id":         object.NewInt(sc.ID),
+				"kind":       object.NewString(sc.Kind),
+				"start_line": object.NewInt(int64(sc.StartLine)),
+				"start_col":  object.NewInt(int64(sc.StartCol)),
+				"end_line":   object.NewInt(int64(sc.EndLine)),
+				"end_col":    object.NewInt(int64(sc.EndCol)),
+			}
+			if sc.SymbolID != nil {
+				m["symbol_id"] = object.NewInt(*sc.SymbolID)
+			}
+			if sc.ParentScopeID != nil {
+				m["parent_scope_id"] = object.NewInt(*sc.ParentScopeID)
+			}
+			return object.NewMap(m)
+		}
+
+		// For each scope, walk parent chain in-memory and build the chain list.
+		result := make(map[string]object.Object, len(scopes))
+		for _, sc := range scopes {
+			var chain []object.Object
+			cur := sc
+			seen := make(map[int64]bool)
+			for cur != nil {
+				if seen[cur.ID] {
+					break // prevent infinite loop on cycles
+				}
+				seen[cur.ID] = true
+				chain = append(chain, toRisorMap(cur))
+				if cur.ParentScopeID == nil {
+					break
+				}
+				cur = byID[*cur.ParentScopeID]
+			}
+			key := fmt.Sprintf("%d", sc.ID)
+			result[key] = object.NewList(chain)
+		}
+		return object.NewMap(result)
+	})
+}
+
 func makeFunctionParamsFn(s *store.Store) *object.Builtin {
 	return object.NewBuiltin("function_params", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {

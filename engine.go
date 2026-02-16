@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jward/canopy/internal/runtime"
@@ -504,13 +505,26 @@ func (e *Engine) Resolve(ctx context.Context) error {
 		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, e.blastRadius),
 	}
 
-	var errs []error
+	// Run resolution scripts in parallel (one per language).
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs []error
+	)
 	for _, lang := range langs {
-		scriptPath := runtime.ResolutionScriptPath(lang)
-		if err := e.runtime.RunScript(ctx, scriptPath, extras); err != nil {
-			errs = append(errs, fmt.Errorf("resolution script for %s: %w", lang, err))
-		}
+		wg.Add(1)
+		go func(l string) {
+			defer wg.Done()
+			scriptPath := runtime.ResolutionScriptPath(l)
+			if err := e.runtime.RunScript(ctx, scriptPath, extras); err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("resolution script for %s: %w", l, err))
+				mu.Unlock()
+			}
+		}(lang)
 	}
+	wg.Wait()
+
 	if len(errs) > 0 {
 		return fmt.Errorf("resolution had %d error(s): %w", len(errs), errs[0])
 	}

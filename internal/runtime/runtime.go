@@ -89,8 +89,19 @@ func (r *Runtime) eval(ctx context.Context, source, label string, extraGlobals m
 // buildImporter returns a Risor importer configured for the Runtime's script source.
 // Returns nil if neither fs.FS nor scriptsDir is configured.
 func (r *Runtime) buildImporter(globals map[string]any) importer.Importer {
-	globalNames := make([]string, 0, len(globals))
+	// Combine our custom global names with Risor's default globals (builtins
+	// like len, string, print, and modules like strings, math, etc.) so that
+	// imported modules can reference them without "undefined variable" errors.
+	defaultNames := risor.NewConfig().GlobalNames()
+	nameSet := make(map[string]bool, len(globals)+len(defaultNames))
 	for name := range globals {
+		nameSet[name] = true
+	}
+	for _, name := range defaultNames {
+		nameSet[name] = true
+	}
+	globalNames := make([]string, 0, len(nameSet))
+	for name := range nameSet {
 		globalNames = append(globalNames, name)
 	}
 
@@ -194,6 +205,7 @@ func (r *Runtime) buildGlobals(extra map[string]any) map[string]any {
 		globals["files_by_language"] = makeFilesByLanguageFn(r.store)
 		globals["symbols_by_kind"] = makeSymbolsByKindFn(r.store)
 		globals["scope_chain"] = makeScopeChainFn(r.store)
+		globals["batch_scope_chains"] = makeBatchScopeChainsFn(r.store)
 		globals["function_params"] = makeFunctionParamsFn(r.store)
 		globals["db_query"] = makeDBQueryFn(r.store)
 	}

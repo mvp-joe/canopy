@@ -1,0 +1,190 @@
+// Shared resolution helpers used by all language resolution scripts.
+//
+// Import with:
+//   from "lib/resolve_helpers" import find_scope_for_ref, find_caller_symbol_id, create_call_edges
+//
+// These functions rely on globals provided by the runtime:
+//   db_query, insert_call_edge
+
+// find_scope_for_ref returns the innermost scope containing the given reference
+// position from a list of scopes for a file.
+func find_scope_for_ref(scopes, ref) {
+  ref_line := ref["start_line"]
+  ref_col := ref["start_col"]
+  best := nil
+  best_size := -1
+  for _, sc := range scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    // Check if ref is inside this scope
+    inside := false
+    if ref_line > sl && ref_line < el {
+      inside = true
+    } else if ref_line == sl && ref_line == el {
+      inside = ref_col >= sc_col && ref_col <= ec
+    } else if ref_line == sl {
+      inside = ref_col >= sc_col
+    } else if ref_line == el {
+      inside = ref_col <= ec
+    }
+    if inside {
+      // Prefer the innermost (smallest) scope
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best == nil || size < best_size {
+        best = sc
+        best_size = size
+      }
+    }
+  }
+  return best
+}
+
+// find_caller_symbol_id walks the scope chain from a reference's scope upward
+// to find the enclosing function/method scope and returns its symbol_id.
+//
+// Parameters:
+//   ref_scope_id   - scope ID of the reference
+//   scope_chains   - pre-built map from scope_id_str → chain list (from batch_scope_chains),
+//                    or nil to fall back to scope_chain() calls
+//   file_syms_by_id - pre-built map from sym_id_str → symbol map, or nil to fall back to db_query
+//   valid_kinds    - map of symbol kinds that count as callers, e.g. {"function": true, "method": true}.
+//                    If nil, defaults to {"function": true, "method": true}.
+func find_caller_symbol_id(ref_scope_id, scope_chains, file_syms_by_id, valid_kinds) {
+  if ref_scope_id == nil {
+    return nil
+  }
+  if valid_kinds == nil {
+    valid_kinds = {"function": true, "method": true}
+  }
+
+  // Get scope chain: use pre-built map if available, else fall back to DB
+  chain := []
+  scope_id_str := string(ref_scope_id)
+  if scope_chains != nil && scope_id_str in scope_chains {
+    chain = scope_chains[scope_id_str]
+  } else {
+    chain = scope_chain(ref_scope_id)
+  }
+
+  for _, sc := range chain {
+    if sc["kind"] == "function" {
+      sym_id := nil
+      if "symbol_id" in sc {
+        sym_id = sc["symbol_id"]
+      }
+      if sym_id != nil {
+        // Verify the symbol kind using pre-built map or DB fallback
+        if file_syms_by_id != nil {
+          sid_str := string(sym_id)
+          if sid_str in file_syms_by_id {
+            sym := file_syms_by_id[sid_str]
+            if sym["kind"] in valid_kinds {
+              return sym_id
+            }
+          }
+          // Position-based fallback: scan for function/method at scope's position
+          for _, sym := range file_syms_by_id {
+            if sym["kind"] in valid_kinds && sym["start_line"] == sc["start_line"] && sym["start_col"] == sc["start_col"] {
+              return sym["id"]
+            }
+          }
+        } else {
+          sym_rows := db_query(
+            "SELECT kind FROM symbols WHERE id = ?",
+            sym_id,
+          )
+          if len(sym_rows) > 0 {
+            sym_kind := sym_rows[0]["kind"]
+            if sym_kind in valid_kinds {
+              return sym_id
+            }
+          }
+          // Fallback: find function/method symbol at this scope's position
+          scope_syms := db_query(
+            "SELECT id, kind FROM symbols WHERE file_id = (SELECT file_id FROM scopes WHERE id = ?) AND start_line = ? AND start_col = ?",
+            sc["id"], sc["start_line"], sc["start_col"],
+          )
+          for _, ss := range scope_syms {
+            if ss["kind"] in valid_kinds {
+              return ss["id"]
+            }
+          }
+        }
+      }
+    }
+  }
+  return nil
+}
+
+// create_call_edges creates call graph edges for resolved call/field_access
+// references in a single file. Parameters:
+//   refs            - list of references for the file
+//   resolved_set    - map of ref_id_str → true for resolved references
+//   scopes          - list of scopes for the file
+//   fid             - the file ID
+//   scope_chains    - pre-built scope chains map (from batch_scope_chains), or nil
+//   file_syms_by_id - pre-built map from sym_id_str → symbol map, or nil
+//   valid_kinds     - valid caller kinds (passed to find_caller_symbol_id)
+func create_call_edges(refs, resolved_set, scopes, fid, scope_chains, file_syms_by_id, valid_kinds) {
+  for _, ref := range refs {
+    ref_id := ref["id"]
+    ref_id_str := string(ref_id)
+    ref_ctx := ref["context"]
+
+    if ref_ctx != "call" && ref_ctx != "field_access" {
+      continue
+    }
+    if !(ref_id_str in resolved_set) {
+      continue
+    }
+
+    // Get the resolved target
+    rr_rows := db_query(
+      "SELECT target_symbol_id FROM resolved_references WHERE reference_id = ?",
+      ref_id,
+    )
+    if len(rr_rows) == 0 {
+      continue
+    }
+
+    target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // For field_access, only create call edges if the target is callable
+    if ref_ctx == "field_access" {
+      // Check file_syms_by_id first, then fall back to DB
+      is_callable := false
+      if file_syms_by_id != nil {
+        tid_str := string(target_sym_id)
+        if tid_str in file_syms_by_id {
+          tk := file_syms_by_id[tid_str]["kind"]
+          is_callable = tk == "method" || tk == "function"
+        }
+      }
+      if !is_callable {
+        target_rows := db_query("SELECT kind FROM symbols WHERE id = ?", target_sym_id)
+        if len(target_rows) == 0 { continue }
+        tk := target_rows[0]["kind"]
+        if tk != "method" && tk != "function" { continue }
+      }
+    }
+
+    // Find the caller function via scope chain
+    ref_scope := find_scope_for_ref(scopes, ref)
+    caller_sym_id := nil
+    if ref_scope != nil {
+      caller_sym_id = find_caller_symbol_id(ref_scope["id"], scope_chains, file_syms_by_id, valid_kinds)
+    }
+
+    if caller_sym_id != nil && target_sym_id != nil {
+      insert_call_edge({
+        caller_symbol_id: caller_sym_id,
+        callee_symbol_id: target_sym_id,
+        file_id: fid,
+        line: ref["start_line"],
+        col: ref["start_col"],
+      })
+    }
+  }
+}

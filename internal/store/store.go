@@ -14,7 +14,7 @@ type Store struct {
 
 // NewStore opens a SQLite database at dbPath with WAL mode enabled.
 func NewStore(dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=ON")
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_foreign_keys=ON&_busy_timeout=30000")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
