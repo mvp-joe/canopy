@@ -32,7 +32,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -427,14 +432,18 @@ for _, m := range using_matches {
   }
 }
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Namespace declarations ---
 ns_matches := query("(namespace_definition name: (namespace_identifier) @name) @ns", root)
 for _, m := range ns_matches {
   name_node := m["name"]
   ns_node := m["ns"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "namespace",
     visibility: "public",
     start_line: start_line(ns_node),
@@ -442,6 +451,7 @@ for _, m := range ns_matches {
     end_line: end_line(ns_node),
     end_col: end_col(ns_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Class declarations ---
@@ -469,6 +479,7 @@ for _, m := range class_matches {
     end_line: end_line(outer),
     end_col: end_col(outer),
   })
+  symbol_ids[name] = sym_id
 
   // Extract base classes (inheritance)
   base_matches := query("(base_class_clause (type_identifier) @base)", class_node)
@@ -522,6 +533,7 @@ for _, m := range struct_matches {
     end_line: end_line(struct_node),
     end_col: end_col(struct_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract members (default access for struct is public)
   extract_class_members(sym_id, body_node, "public")
@@ -545,6 +557,7 @@ for _, m := range enum_matches {
     end_line: end_line(enum_node),
     end_col: end_col(enum_node),
   })
+  symbol_ids[name] = sym_id
 
   enumerator_matches := query("(enumerator name: (identifier) @name) @en", body_node)
   for _, em := range enumerator_matches {
@@ -572,7 +585,7 @@ for _, m := range typedef_matches {
 
   name := extract_declarator_name(decl_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "type_alias",
@@ -582,6 +595,7 @@ for _, m := range typedef_matches {
     end_line: end_line(td_node),
     end_col: end_col(td_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Macro definitions ---
@@ -589,9 +603,10 @@ def_matches := query("(preproc_def name: (identifier) @name) @def", root)
 for _, m := range def_matches {
   name_node := m["name"]
   def_node := m["def"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "constant",
     visibility: "public",
     start_line: start_line(def_node),
@@ -599,15 +614,17 @@ for _, m := range def_matches {
     end_line: end_line(def_node),
     end_col: end_col(def_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 fndef_matches := query("(preproc_function_def name: (identifier) @name) @def", root)
 for _, m := range fndef_matches {
   name_node := m["name"]
   def_node := m["def"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "function",
     visibility: "public",
     start_line: start_line(def_node),
@@ -615,6 +632,7 @@ for _, m := range fndef_matches {
     end_line: end_line(def_node),
     end_col: end_col(def_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Function definitions (top-level and qualified like Class::method) ---
@@ -663,7 +681,7 @@ for _, m := range funcdef_matches {
     kind = "method"
     scope_node := node_child(name_node, "scope")
     if scope_node != nil {
-      parent_id = find_symbol_id(node_text(scope_node))
+      parent_id = find_symbol_id(node_text(scope_node), symbol_ids)
     }
   }
 
@@ -681,6 +699,7 @@ for _, m := range funcdef_matches {
     sym_map["parent_symbol_id"] = parent_id
   }
   sym_id := insert_symbol(sym_map)
+  symbol_ids[name] = sym_id
 
   params_node := node_child(fdecl_node, "parameters")
   if params_node != nil {
@@ -728,6 +747,7 @@ for _, m := range tmpl_func_matches {
     end_line: end_line(tmpl_node),
     end_col: end_col(tmpl_node),
   })
+  symbol_ids[name] = sym_id
 
   params_node := node_child(fdecl_node, "parameters")
   if params_node != nil {
@@ -783,7 +803,7 @@ for _, m := range proto_matches {
   name := extract_declarator_name(name_node)
 
   // Skip if already exists
-  existing := find_symbol_id(name)
+  existing := find_symbol_id(name, symbol_ids)
   if existing != nil {
     continue
   }
@@ -801,6 +821,7 @@ for _, m := range proto_matches {
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 
   params_node := node_child(fdecl_node, "parameters")
   if params_node != nil {
@@ -829,13 +850,14 @@ for _, m := range global_decl_matches {
   if parent != nil && parent.Type() == "field_declaration_list" {
     continue
   }
-  existing := find_symbol_id(node_text(name_node))
+  name := node_text(name_node)
+  existing := find_symbol_id(name, symbol_ids)
   if existing != nil {
     continue
   }
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "variable",
     visibility: "public",
     start_line: start_line(decl_node),
@@ -843,6 +865,7 @@ for _, m := range global_decl_matches {
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Scope tree ---
@@ -862,7 +885,7 @@ for _, m := range ns_scope_matches {
   ns_nn := node_child(ns_node, "name")
   ns_sym_id := nil
   if ns_nn != nil {
-    ns_sym_id = find_symbol_id(node_text(ns_nn))
+    ns_sym_id = find_symbol_id(node_text(ns_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,
@@ -886,7 +909,7 @@ for _, m := range class_scope_matches {
   cls_nn := m["name"]
   cls_sym_id := nil
   if cls_nn != nil {
-    cls_sym_id = find_symbol_id(node_text(cls_nn))
+    cls_sym_id = find_symbol_id(node_text(cls_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,
@@ -923,7 +946,7 @@ for _, m := range fn_scope_matches {
   if fdecl != nil {
     nn := node_child(fdecl, "declarator")
     if nn != nil {
-      fn_sym_id = find_symbol_id(extract_declarator_name(nn))
+      fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
   scope_map := {
@@ -956,7 +979,7 @@ for _, m := range tmpl_fn_scope_matches {
   if fdecl != nil {
     nn := node_child(fdecl, "declarator")
     if nn != nil {
-      fn_sym_id = find_symbol_id(extract_declarator_name(nn))
+      fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
   scope_map := {

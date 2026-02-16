@@ -32,7 +32,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -316,6 +321,9 @@ for _, m := range req_matches {
   }
 }
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Module declarations ---
 mod_matches := query("(module name: (constant) @name) @mod", root)
 for _, m := range mod_matches {
@@ -333,6 +341,7 @@ for _, m := range mod_matches {
     end_line: end_line(mod_node),
     end_col: end_col(mod_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Class declarations ---
@@ -352,6 +361,7 @@ for _, m := range class_matches {
     end_line: end_line(class_node),
     end_col: end_col(class_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Top-level method definitions ---
@@ -376,6 +386,7 @@ for i := 0; i < root_count; i++ {
       end_line: end_line(child),
       end_col: end_col(child),
     })
+    symbol_ids[name] = sym_id
 
     mp := node_child(child, "parameters")
     if mp != nil {
@@ -398,7 +409,7 @@ file_scope_id := insert_scope({
 for _, m := range mod_matches {
   mod_node := m["mod"]
   mod_name := node_text(m["name"])
-  mod_sym_id := find_symbol_id(mod_name)
+  mod_sym_id := find_symbol_id(mod_name, symbol_ids)
 
   mod_scope_map := {
     file_id: file_id,
@@ -425,7 +436,7 @@ for _, m := range mod_matches {
 for _, m := range class_matches {
   class_node := m["class"]
   class_name := node_text(m["name"])
-  class_sym_id := find_symbol_id(class_name)
+  class_sym_id := find_symbol_id(class_name, symbol_ids)
 
   class_scope_map := {
     file_id: file_id,
@@ -476,7 +487,7 @@ for i := 0; i < root_count; i++ {
     nn := child.NamedChild(0)
     fn_sym_id := nil
     if nn != nil {
-      fn_sym_id = find_symbol_id(node_text(nn))
+      fn_sym_id = find_symbol_id(node_text(nn), symbol_ids)
     }
     scope_map := {
       file_id: file_id,

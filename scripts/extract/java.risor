@@ -33,7 +33,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -247,7 +252,8 @@ func extract_block_scopes(node, parent_scope_id) {
 // parent_sym_id: symbol ID of the enclosing class/interface/enum (nil for top-level).
 // parent_scope_id: scope ID of the parent scope.
 // is_interface: true if the parent is an interface (affects default visibility).
-func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
+// symbol_map: map of symbol names to IDs for batched writes.
+func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, symbol_map) {
   nt := node.Type()
 
   if nt == "field_declaration" {
@@ -297,6 +303,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
           end_col: end_col(node),
           parent_symbol_id: parent_sym_id,
         })
+        symbol_map[field_name] = sym_id
         extract_annotations(sym_id, mods_node)
       }
     }
@@ -332,6 +339,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       end_col: end_col(node),
       parent_symbol_id: parent_sym_id,
     })
+    symbol_map[name] = sym_id
 
     params_node := node_child(node, "parameters")
     if params_node != nil {
@@ -400,6 +408,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       end_col: end_col(node),
       parent_symbol_id: parent_sym_id,
     })
+    symbol_map[name] = sym_id
 
     params_node := node_child(node, "parameters")
     if params_node != nil {
@@ -460,6 +469,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       sym_map["parent_symbol_id"] = parent_sym_id
     }
     sym_id := insert_symbol(sym_map)
+    symbol_map[name] = sym_id
 
     extract_type_params(sym_id, node)
     extract_annotations(sym_id, mods_node)
@@ -534,7 +544,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       body_count := int(body_node.NamedChildCount())
       for i := 0; i < body_count; i++ {
         member := body_node.NamedChild(i)
-        extract_declaration(member, sym_id, class_scope_id, false)
+        extract_declaration(member, sym_id, class_scope_id, false, symbol_map)
       }
     }
 
@@ -563,6 +573,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       sym_map["parent_symbol_id"] = parent_sym_id
     }
     sym_id := insert_symbol(sym_map)
+    symbol_map[name] = sym_id
 
     extract_type_params(sym_id, node)
     extract_annotations(sym_id, mods_node)
@@ -586,7 +597,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       body_count := int(body_node.NamedChildCount())
       for i := 0; i < body_count; i++ {
         member := body_node.NamedChild(i)
-        extract_declaration(member, sym_id, iface_scope_id, true)
+        extract_declaration(member, sym_id, iface_scope_id, true, symbol_map)
       }
     }
 
@@ -615,6 +626,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
       sym_map["parent_symbol_id"] = parent_sym_id
     }
     sym_id := insert_symbol(sym_map)
+    symbol_map[name] = sym_id
 
     extract_annotations(sym_id, mods_node)
 
@@ -657,7 +669,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
         mt := member.Type()
         // Skip enum constants (already handled above)
         if mt != "enum_constant" {
-          extract_declaration(member, sym_id, nil, false)
+          extract_declaration(member, sym_id, nil, false, symbol_map)
         }
       }
     }
@@ -670,6 +682,9 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface) {
 tree := parse(file_path, "java")
 root := tree.RootNode()
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Package declaration ---
 pkg_matches := query("(package_declaration) @pkg", root)
 for _, m := range pkg_matches {
@@ -679,9 +694,10 @@ for _, m := range pkg_matches {
     child := pkg_node.NamedChild(i)
     ct := child.Type()
     if ct == "scoped_identifier" || ct == "identifier" {
-      insert_symbol({
+      pkg_name := node_text(child)
+      sym_id := insert_symbol({
         file_id: file_id,
-        name: node_text(child),
+        name: pkg_name,
         kind: "package",
         visibility: "public",
         start_line: start_line(pkg_node),
@@ -689,6 +705,7 @@ for _, m := range pkg_matches {
         end_line: end_line(pkg_node),
         end_col: end_col(pkg_node),
       })
+      symbol_ids[pkg_name] = sym_id
       break
     }
   }
@@ -762,7 +779,7 @@ for i := 0; i < root_count; i++ {
   child := root.NamedChild(i)
   ct := child.Type()
   if ct == "class_declaration" || ct == "interface_declaration" || ct == "enum_declaration" {
-    extract_declaration(child, nil, file_scope_id, false)
+    extract_declaration(child, nil, file_scope_id, false, symbol_ids)
   }
 }
 

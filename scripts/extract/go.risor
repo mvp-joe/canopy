@@ -44,7 +44,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -231,13 +236,17 @@ func extract_block_scopes(node, parent_scope_id) {
 tree := parse(file_path, "go")
 root := tree.RootNode()
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Package ---
 pkg_matches := query("(package_clause (package_identifier) @name)", root)
 for _, m := range pkg_matches {
   pkg_node := m["name"]
-  insert_symbol({
+  name := node_text(pkg_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(pkg_node),
+    name: name,
     kind: "package",
     visibility: "public",
     start_line: start_line(pkg_node),
@@ -245,6 +254,7 @@ for _, m := range pkg_matches {
     end_line: end_line(pkg_node),
     end_col: end_col(pkg_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Imports ---
@@ -312,6 +322,7 @@ for _, m := range type_matches {
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 
   if kind == "struct" {
     field_matches := query("(field_declaration_list (field_declaration) @field)", type_node)
@@ -394,6 +405,7 @@ for _, m := range func_matches {
     end_line: end_line(func_node),
     end_col: end_col(func_node),
   })
+  symbol_ids[name] = sym_id
 
   extract_params(sym_id, params_node, false)
 
@@ -417,7 +429,7 @@ for _, m := range method_matches {
   receiver_type_name := extract_receiver_type_name(receiver_node)
   parent_id := nil
   if receiver_type_name != "" {
-    parent_id = find_symbol_id(receiver_type_name)
+    parent_id = find_symbol_id(receiver_type_name, symbol_ids)
   }
 
   sym_map := {
@@ -435,6 +447,7 @@ for _, m := range method_matches {
   }
 
   sym_id := insert_symbol(sym_map)
+  symbol_ids[name] = sym_id
 
   extract_params(sym_id, receiver_node, true)
   extract_params(sym_id, params_node, false)
@@ -450,32 +463,36 @@ var_matches := query("(var_declaration (var_spec name: (identifier) @name) @spec
 for _, m := range var_matches {
   name_node := m["name"]
   decl_node := m["decl"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "variable",
-    visibility: visibility(node_text(name_node)),
+    visibility: visibility(name),
     start_line: start_line(decl_node),
     start_col: start_col(decl_node),
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 short_var_matches := query("(short_var_declaration left: (expression_list (identifier) @name)) @decl", root)
 for _, m := range short_var_matches {
   name_node := m["name"]
   decl_node := m["decl"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "variable",
-    visibility: visibility(node_text(name_node)),
+    visibility: visibility(name),
     start_line: start_line(decl_node),
     start_col: start_col(decl_node),
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Constant declarations ---
@@ -483,16 +500,18 @@ const_matches := query("(const_declaration (const_spec name: (identifier) @name)
 for _, m := range const_matches {
   name_node := m["name"]
   decl_node := m["decl"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "constant",
-    visibility: visibility(node_text(name_node)),
+    visibility: visibility(name),
     start_line: start_line(decl_node),
     start_col: start_col(decl_node),
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Scope tree ---
@@ -511,7 +530,7 @@ for _, m := range fn_scope_matches {
   fn_nn := node_child(fn_node, "name")
   fn_sym_id := nil
   if fn_nn != nil {
-    fn_sym_id = find_symbol_id(node_text(fn_nn))
+    fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,
@@ -538,7 +557,7 @@ for _, m := range meth_scope_matches {
   fn_nn := node_child(fn_node, "name")
   fn_sym_id := nil
   if fn_nn != nil {
-    fn_sym_id = find_symbol_id(node_text(fn_nn))
+    fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,

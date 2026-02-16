@@ -29,6 +29,9 @@ type Engine struct {
 	// blastRadius accumulates file IDs that need re-resolution after indexing.
 	// nil means "resolve everything" (first run or full reindex).
 	blastRadius map[int64]bool
+
+	// useParallel enables the parallel extraction pipeline.
+	useParallel bool
 }
 
 // Option configures an Engine.
@@ -41,6 +44,15 @@ func WithLanguages(languages ...string) Option {
 		for _, lang := range languages {
 			e.languages[lang] = true
 		}
+	}
+}
+
+// WithParallel controls parallel extraction. When true (default), IndexFiles
+// uses a worker pool for parsing and script execution, with a single writer
+// goroutine committing batches to SQLite. Set to false for serial mode.
+func WithParallel(parallel bool) Option {
+	return func(e *Engine) {
+		e.useParallel = parallel
 	}
 }
 
@@ -73,8 +85,9 @@ func New(dbPath string, scriptsDir string, opts ...Option) (*Engine, error) {
 	// Apply options to a temporary Engine to collect configuration before
 	// creating the Runtime, since the Runtime needs to know about fs.FS.
 	e := &Engine{
-		store:      s,
-		scriptsDir: scriptsDir,
+		store:       s,
+		scriptsDir:  scriptsDir,
+		useParallel: true, // default to parallel extraction
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -164,7 +177,11 @@ func (e *Engine) captureSymbols(fileID int64) ([]capturedSymbol, error) {
 	return captured, nil
 }
 
-// IndexFiles indexes the given file paths. For each file:
+// IndexFiles indexes the given file paths. When WithParallel is enabled,
+// uses a worker pool for concurrent extraction with batched SQLite writes.
+// Otherwise falls back to the serial path.
+//
+// For each file:
 // 1. Detect language from extension
 // 2. Skip unsupported or filtered-out languages
 // 3. Skip unchanged files (same content hash)
@@ -175,6 +192,13 @@ func (e *Engine) captureSymbols(fileID int64) ([]capturedSymbol, error) {
 //
 // Errors on individual files are logged and skipped; processing continues.
 func (e *Engine) IndexFiles(ctx context.Context, paths []string) error {
+	if e.useParallel {
+		return e.IndexFilesParallel(ctx, paths)
+	}
+	return e.indexFilesSerial(ctx, paths)
+}
+
+func (e *Engine) indexFilesSerial(ctx context.Context, paths []string) error {
 	// Initialize blast radius so Resolve() can distinguish "no changes"
 	// (non-nil empty map) from "first run" (nil).
 	if e.blastRadius == nil {

@@ -32,7 +32,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -183,7 +188,7 @@ func extract_return_type(sym_id, node) {
 }
 
 // Extract methods from a declaration_list (class/trait/interface body).
-func extract_methods(parent_sym_id, decl_list, container_kind) {
+func extract_methods(parent_sym_id, decl_list, container_kind, sym_ids) {
   method_matches := query("(method_declaration) @method", decl_list)
   for _, m := range method_matches {
     method_node := m["method"]
@@ -210,6 +215,7 @@ func extract_methods(parent_sym_id, decl_list, container_kind) {
       sym_map["parent_symbol_id"] = parent_sym_id
     }
     sym_id := insert_symbol(sym_map)
+    sym_ids[name] = sym_id
 
     // Extract parameters
     params_node := node_child(method_node, "parameters")
@@ -302,14 +308,18 @@ func extract_use_traits(parent_sym_id, decl_list) {
 tree := parse(file_path, "php")
 root := tree.RootNode()
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Namespace ---
 ns_matches := query("(namespace_definition (namespace_name) @name) @ns", root)
 for _, m := range ns_matches {
   ns_node := m["ns"]
   name_node := m["name"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "namespace",
     visibility: "public",
     start_line: start_line(ns_node),
@@ -317,6 +327,7 @@ for _, m := range ns_matches {
     end_line: end_line(ns_node),
     end_col: end_col(ns_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Use statements (imports) ---
@@ -363,9 +374,10 @@ for _, m := range toplevel_const_matches {
     continue
   }
 
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "constant",
     visibility: "public",
     start_line: start_line(decl_node),
@@ -373,6 +385,7 @@ for _, m := range toplevel_const_matches {
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Interface declarations ---
@@ -393,8 +406,9 @@ for _, m := range iface_matches {
     end_line: end_line(iface_node),
     end_col: end_col(iface_node),
   })
+  symbol_ids[name] = sym_id
 
-  extract_methods(sym_id, body_node, "interface")
+  extract_methods(sym_id, body_node, "interface", symbol_ids)
 }
 
 // --- Trait declarations ---
@@ -415,8 +429,9 @@ for _, m := range trait_matches {
     end_line: end_line(trait_node),
     end_col: end_col(trait_node),
   })
+  symbol_ids[name] = sym_id
 
-  extract_methods(sym_id, body_node, "trait")
+  extract_methods(sym_id, body_node, "trait", symbol_ids)
 }
 
 // --- Class declarations ---
@@ -437,8 +452,9 @@ for _, m := range class_matches {
     end_line: end_line(class_node),
     end_col: end_col(class_node),
   })
+  symbol_ids[name] = sym_id
 
-  extract_methods(sym_id, body_node, "class")
+  extract_methods(sym_id, body_node, "class", symbol_ids)
   extract_properties(sym_id, body_node)
   extract_class_constants(sym_id, body_node)
   extract_use_traits(sym_id, body_node)
@@ -461,6 +477,7 @@ for _, m := range func_matches {
     end_line: end_line(func_node),
     end_col: end_col(func_node),
   })
+  symbol_ids[name] = sym_id
 
   params_node := node_child(func_node, "parameters")
   if params_node != nil {
@@ -484,7 +501,7 @@ file_scope_id := insert_scope({
 for _, m := range ns_matches {
   ns_node := m["ns"]
   ns_name_node := m["name"]
-  ns_sym_id := find_symbol_id(node_text(ns_name_node))
+  ns_sym_id := find_symbol_id(node_text(ns_name_node), symbol_ids)
   scope_map := {
     file_id: file_id,
     kind: "namespace",
@@ -504,7 +521,7 @@ for _, m := range ns_matches {
 for _, m := range class_matches {
   class_node := m["class"]
   c_name := node_text(m["name"])
-  c_sym_id := find_symbol_id(c_name)
+  c_sym_id := find_symbol_id(c_name, symbol_ids)
   scope_map := {
     file_id: file_id,
     kind: "class",
@@ -527,7 +544,7 @@ for _, m := range class_matches {
     meth_nn := node_child(meth_node, "name")
     meth_sym_id := nil
     if meth_nn != nil {
-      meth_sym_id = find_symbol_id(node_text(meth_nn))
+      meth_sym_id = find_symbol_id(node_text(meth_nn), symbol_ids)
     }
     meth_scope_map := {
       file_id: file_id,
@@ -549,7 +566,7 @@ for _, m := range class_matches {
 for _, m := range trait_matches {
   trait_node := m["trait"]
   t_name := node_text(m["name"])
-  t_sym_id := find_symbol_id(t_name)
+  t_sym_id := find_symbol_id(t_name, symbol_ids)
   scope_map := {
     file_id: file_id,
     kind: "class",
@@ -569,7 +586,7 @@ for _, m := range trait_matches {
 for _, m := range iface_matches {
   iface_node := m["iface"]
   i_name := node_text(m["name"])
-  i_sym_id := find_symbol_id(i_name)
+  i_sym_id := find_symbol_id(i_name, symbol_ids)
   scope_map := {
     file_id: file_id,
     kind: "class",
@@ -591,7 +608,7 @@ for _, m := range func_matches {
   fn_nn := node_child(fn_node, "name")
   fn_sym_id := nil
   if fn_nn != nil {
-    fn_sym_id = find_symbol_id(node_text(fn_nn))
+    fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,

@@ -45,7 +45,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -277,7 +282,8 @@ func extract_return_type(sym_id, func_node) {
 // parent_sym_id: the parent class symbol ID (nil for top-level).
 // decorators: list of decorator names (empty for undecorated).
 // decorated_node: the decorated_definition node wrapping this def (nil if none).
-func extract_definition(node, parent_sym_id, decorators, decorated_node) {
+// symbol_map: in-memory map of symbol names to IDs (for batched writes).
+func extract_definition(node, parent_sym_id, decorators, decorated_node, symbol_map) {
   node_type := node.Type()
 
   if node_type == "function_definition" {
@@ -312,6 +318,7 @@ func extract_definition(node, parent_sym_id, decorators, decorated_node) {
     }
 
     sym_id := insert_symbol(sym_map)
+    symbol_map[name] = sym_id
 
     if decorated_node != nil {
       insert_decorators_as_annotations(sym_id, decorated_node)
@@ -332,7 +339,7 @@ func extract_definition(node, parent_sym_id, decorators, decorated_node) {
         body_child := fn_body.NamedChild(bi)
         body_child_type := body_child.Type()
         if body_child_type == "function_definition" || body_child_type == "class_definition" || body_child_type == "decorated_definition" {
-          extract_definition(body_child, nil, [], nil)
+          extract_definition(body_child, nil, [], nil, symbol_map)
         }
       }
     }
@@ -365,6 +372,7 @@ func extract_definition(node, parent_sym_id, decorators, decorated_node) {
       sym_map["parent_symbol_id"] = parent_sym_id
     }
     class_sym_id := insert_symbol(sym_map)
+    symbol_map[name] = class_sym_id
 
     if decorated_node != nil {
       insert_decorators_as_annotations(class_sym_id, decorated_node)
@@ -417,15 +425,15 @@ func extract_definition(node, parent_sym_id, decorators, decorated_node) {
         child_type := child.Type()
 
         if child_type == "function_definition" {
-          extract_definition(child, class_sym_id, [], nil)
+          extract_definition(child, class_sym_id, [], nil, symbol_map)
         } else if child_type == "decorated_definition" {
           child_decorators := get_decorators(child)
           def_node := node_child(child, "definition")
           if def_node != nil {
-            extract_definition(def_node, class_sym_id, child_decorators, child)
+            extract_definition(def_node, class_sym_id, child_decorators, child, symbol_map)
           }
         } else if child_type == "class_definition" {
-          extract_definition(child, class_sym_id, [], nil)
+          extract_definition(child, class_sym_id, [], nil, symbol_map)
         } else if child_type == "expression_statement" {
           expr := child.NamedChild(0)
           if expr != nil && expr.Type() == "assignment" {
@@ -456,7 +464,7 @@ func extract_definition(node, parent_sym_id, decorators, decorated_node) {
     dec_decorators := get_decorators(node)
     def_node := node_child(node, "definition")
     if def_node != nil {
-      return extract_definition(def_node, parent_sym_id, dec_decorators, node)
+      return extract_definition(def_node, parent_sym_id, dec_decorators, node, symbol_map)
     }
     return nil
   }
@@ -576,6 +584,8 @@ for _, m := range wildcard_matches {
   })
 }
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
 
 // --- Top-level definitions ---
 root_count := int(root.NamedChildCount())
@@ -584,14 +594,14 @@ for i := 0; i < root_count; i++ {
   child_type := child.Type()
 
   if child_type == "function_definition" || child_type == "class_definition" || child_type == "decorated_definition" {
-    extract_definition(child, nil, [], nil)
+    extract_definition(child, nil, [], nil, symbol_ids)
   } else if child_type == "expression_statement" {
     expr := child.NamedChild(0)
     if expr != nil && expr.Type() == "assignment" {
       left := node_child(expr, "left")
       if left != nil && left.Type() == "identifier" {
         var_name := node_text(left)
-        insert_symbol({
+        sym_id := insert_symbol({
           file_id: file_id,
           name: var_name,
           kind: "variable",
@@ -601,6 +611,7 @@ for i := 0; i < root_count; i++ {
           end_line: end_line(child),
           end_col: end_col(child),
         })
+        symbol_ids[var_name] = sym_id
       }
     }
   }
@@ -624,7 +635,7 @@ for _, m := range fn_scope_matches {
   fn_nn := node_child(fn_node, "name")
   fn_sym_id := nil
   if fn_nn != nil {
-    fn_sym_id = find_symbol_id(node_text(fn_nn))
+    fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,
@@ -652,7 +663,7 @@ for _, m := range class_scope_matches {
   cls_nn := node_child(cls_node, "name")
   cls_sym_id := nil
   if cls_nn != nil {
-    cls_sym_id = find_symbol_id(node_text(cls_nn))
+    cls_sym_id = find_symbol_id(node_text(cls_nn), symbol_ids)
   }
   scope_map := {
     file_id: file_id,

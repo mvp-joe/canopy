@@ -32,7 +32,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -166,6 +171,9 @@ func extract_block_scopes(node, parent_scope_id) {
 tree := parse(file_path, "c")
 root := tree.RootNode()
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Includes ---
 include_matches := query("(preproc_include) @inc", root)
 for _, m := range include_matches {
@@ -211,6 +219,7 @@ for _, m := range struct_matches {
     end_line: end_line(struct_node),
     end_col: end_col(struct_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract fields
   field_matches := query("(field_declaration) @field", body_node)
@@ -256,7 +265,7 @@ for _, m := range typedef_matches {
     type_expr = node_text(type_node)
   }
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "type_alias",
@@ -266,6 +275,7 @@ for _, m := range typedef_matches {
     end_line: end_line(td_node),
     end_col: end_col(td_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Enum declarations ---
@@ -286,6 +296,7 @@ for _, m := range enum_matches {
     end_line: end_line(enum_node),
     end_col: end_col(enum_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract enumerators as type_members with kind="variant"
   enumerator_matches := query("(enumerator name: (identifier) @name) @en", body_node)
@@ -307,9 +318,10 @@ def_matches := query("(preproc_def name: (identifier) @name) @def", root)
 for _, m := range def_matches {
   name_node := m["name"]
   def_node := m["def"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "constant",
     visibility: "public",
     start_line: start_line(def_node),
@@ -317,6 +329,7 @@ for _, m := range def_matches {
     end_line: end_line(def_node),
     end_col: end_col(def_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // Function-like macros: #define NAME(params) body
@@ -324,9 +337,10 @@ fndef_matches := query("(preproc_function_def name: (identifier) @name) @def", r
 for _, m := range fndef_matches {
   name_node := m["name"]
   def_node := m["def"]
-  insert_symbol({
+  name := node_text(name_node)
+  sym_id := insert_symbol({
     file_id: file_id,
-    name: node_text(name_node),
+    name: name,
     kind: "function",
     visibility: "public",
     start_line: start_line(def_node),
@@ -334,6 +348,7 @@ for _, m := range fndef_matches {
     end_line: end_line(def_node),
     end_col: end_col(def_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Function definitions ---
@@ -360,6 +375,7 @@ for _, m := range funcdef_matches {
     end_line: end_line(func_node),
     end_col: end_col(func_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract parameters
   params_node := node_child(fdecl_node, "parameters")
@@ -396,7 +412,7 @@ for _, m := range proto_matches {
   name := extract_declarator_name(name_node)
 
   // Check if this name already exists (from function_definition)
-  existing := find_symbol_id(name)
+  existing := find_symbol_id(name, symbol_ids)
   if existing != nil {
     continue
   }
@@ -413,6 +429,7 @@ for _, m := range proto_matches {
     end_line: end_line(decl_node),
     end_col: end_col(decl_node),
   })
+  symbol_ids[name] = sym_id
 
   params_node := node_child(fdecl_node, "parameters")
   if params_node != nil {
@@ -456,7 +473,7 @@ for _, m := range plain_decl_matches {
   name_node := m["name"]
   decl_node := m["decl"]
   // Skip if already added or if parent is not translation_unit
-  existing := find_symbol_id(node_text(name_node))
+  existing := find_symbol_id(node_text(name_node), symbol_ids)
   if existing != nil {
     continue
   }
@@ -477,7 +494,7 @@ ptr_decl_matches := query("(declaration type: (_) @type declarator: (pointer_dec
 for _, m := range ptr_decl_matches {
   name_node := m["name"]
   decl_node := m["decl"]
-  existing := find_symbol_id(node_text(name_node))
+  existing := find_symbol_id(node_text(name_node), symbol_ids)
   if existing != nil {
     continue
   }
@@ -498,7 +515,7 @@ init_ptr_matches := query("(declaration type: (_) @type declarator: (init_declar
 for _, m := range init_ptr_matches {
   name_node := m["name"]
   decl_node := m["decl"]
-  existing := find_symbol_id(node_text(name_node))
+  existing := find_symbol_id(node_text(name_node), symbol_ids)
   if existing != nil {
     continue
   }
@@ -533,7 +550,7 @@ for _, m := range fn_scope_matches {
   if fdecl != nil {
     nn := node_child(fdecl, "declarator")
     if nn != nil {
-      fn_sym_id = find_symbol_id(extract_declarator_name(nn))
+      fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
   scope_map := {

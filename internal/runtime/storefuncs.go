@@ -15,7 +15,7 @@ import (
 // functions accept Risor maps with primitive values and build the structs
 // on the Go side.
 
-func makeInsertSymbolFn(s *store.Store) *object.Builtin {
+func makeInsertSymbolFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_symbol", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_symbol", 1, len(args))
@@ -49,7 +49,7 @@ func makeInsertSymbolFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertScopeFn(s *store.Store) *object.Builtin {
+func makeInsertScopeFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_scope", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_scope", 1, len(args))
@@ -82,7 +82,7 @@ func makeInsertScopeFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertReferenceFn(s *store.Store) *object.Builtin {
+func makeInsertReferenceFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_reference", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_reference", 1, len(args))
@@ -113,7 +113,7 @@ func makeInsertReferenceFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertImportFn(s *store.Store) *object.Builtin {
+func makeInsertImportFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_import", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_import", 1, len(args))
@@ -144,7 +144,7 @@ func makeInsertImportFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertTypeMemberFn(s *store.Store) *object.Builtin {
+func makeInsertTypeMemberFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_type_member", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_type_member", 1, len(args))
@@ -170,7 +170,7 @@ func makeInsertTypeMemberFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertFunctionParamFn(s *store.Store) *object.Builtin {
+func makeInsertFunctionParamFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_function_param", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_function_param", 1, len(args))
@@ -199,7 +199,7 @@ func makeInsertFunctionParamFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertTypeParamFn(s *store.Store) *object.Builtin {
+func makeInsertTypeParamFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_type_param", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_type_param", 1, len(args))
@@ -226,7 +226,7 @@ func makeInsertTypeParamFn(s *store.Store) *object.Builtin {
 	})
 }
 
-func makeInsertAnnotationFn(s *store.Store) *object.Builtin {
+func makeInsertAnnotationFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("insert_annotation", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("insert_annotation", 1, len(args))
@@ -280,7 +280,7 @@ func makeUpdateAnnotationResolvedFn(s *store.Store) *object.Builtin {
 
 // Helper to query symbols by name (needed by extraction scripts for
 // parent lookups, e.g., linking methods to receiver types).
-func makeSymbolsByNameFn(s *store.Store) *object.Builtin {
+func makeSymbolsByNameFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("symbols_by_name", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("symbols_by_name", 1, len(args))
@@ -300,7 +300,7 @@ func makeSymbolsByNameFn(s *store.Store) *object.Builtin {
 }
 
 // Helper to query symbols by file (needed for method-to-receiver linking).
-func makeSymbolsByFileFn(s *store.Store) *object.Builtin {
+func makeSymbolsByFileFn(s store.DataStore) *object.Builtin {
 	return object.NewBuiltin("symbols_by_file", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {
 			return object.NewArgsError("symbols_by_file", 1, len(args))

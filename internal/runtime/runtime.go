@@ -18,7 +18,7 @@ import (
 // Runtime embeds a Risor VM and provides tree-sitter host functions
 // and Store access to extraction and resolution scripts.
 type Runtime struct {
-	store      *store.Store
+	store      store.DataStore
 	scriptsDir string
 	fsys       fs.FS
 	sources    *sourceStore
@@ -36,9 +36,9 @@ func WithRuntimeFS(fsys fs.FS) RuntimeOption {
 	}
 }
 
-// NewRuntime creates a Runtime wired to the given Store and scripts directory.
+// NewRuntime creates a Runtime wired to the given DataStore and scripts directory.
 // Accepts optional RuntimeOptions for configuration such as fs.FS-based script loading.
-func NewRuntime(s *store.Store, scriptsDir string, opts ...RuntimeOption) *Runtime {
+func NewRuntime(s store.DataStore, scriptsDir string, opts ...RuntimeOption) *Runtime {
 	r := &Runtime{
 		store:      s,
 		scriptsDir: scriptsDir,
@@ -160,6 +160,9 @@ func ResolutionScriptPath(language string) string {
 }
 
 // buildGlobals constructs the full set of globals exposed to Risor scripts.
+// Extraction globals work with any DataStore (including BatchedStore).
+// Resolution globals require *store.Store and are only added when the
+// underlying store is a real Store.
 func (r *Runtime) buildGlobals(extra map[string]any) map[string]any {
 	globals := map[string]any{
 		"parse":      makeParseFn(r.sources),
@@ -170,12 +173,8 @@ func (r *Runtime) buildGlobals(extra map[string]any) map[string]any {
 		"log":        mustProxy(&logObject{prefix: "canopy"}),
 	}
 
-	// Expose the Store if available (nil during some tests).
+	// Expose extraction globals — these work with any DataStore.
 	if r.store != nil {
-		globals["db"] = mustProxy(r.store)
-		// Thin insert/query host functions — Risor cannot construct Go
-		// struct pointers, so these accept maps and build structs Go-side.
-
 		// Extraction insert functions
 		globals["insert_symbol"] = makeInsertSymbolFn(r.store)
 		globals["insert_scope"] = makeInsertScopeFn(r.store)
@@ -185,29 +184,34 @@ func (r *Runtime) buildGlobals(extra map[string]any) map[string]any {
 		globals["insert_function_param"] = makeInsertFunctionParamFn(r.store)
 		globals["insert_type_param"] = makeInsertTypeParamFn(r.store)
 		globals["insert_annotation"] = makeInsertAnnotationFn(r.store)
-		globals["update_annotation_resolved"] = makeUpdateAnnotationResolvedFn(r.store)
 
 		// Extraction query functions
 		globals["symbols_by_name"] = makeSymbolsByNameFn(r.store)
 		globals["symbols_by_file"] = makeSymbolsByFileFn(r.store)
 
-		// Resolution insert functions
-		globals["insert_resolved_reference"] = makeInsertResolvedReferenceFn(r.store)
-		globals["insert_implementation"] = makeInsertImplementationFn(r.store)
-		globals["insert_call_edge"] = makeInsertCallEdgeFn(r.store)
-		globals["insert_extension_binding"] = makeInsertExtensionBindingFn(r.store)
+		// Resolution globals require *store.Store (DB access, queries, etc.)
+		if realStore, ok := r.store.(*store.Store); ok {
+			globals["db"] = mustProxy(realStore)
+			globals["update_annotation_resolved"] = makeUpdateAnnotationResolvedFn(realStore)
 
-		// Resolution query functions
-		globals["references_by_file"] = makeReferencesByFileFn(r.store)
-		globals["scopes_by_file"] = makeScopesByFileFn(r.store)
-		globals["imports_by_file"] = makeImportsByFileFn(r.store)
-		globals["type_members"] = makeTypeMembersFn(r.store)
-		globals["files_by_language"] = makeFilesByLanguageFn(r.store)
-		globals["symbols_by_kind"] = makeSymbolsByKindFn(r.store)
-		globals["scope_chain"] = makeScopeChainFn(r.store)
-		globals["batch_scope_chains"] = makeBatchScopeChainsFn(r.store)
-		globals["function_params"] = makeFunctionParamsFn(r.store)
-		globals["db_query"] = makeDBQueryFn(r.store)
+			// Resolution insert functions
+			globals["insert_resolved_reference"] = makeInsertResolvedReferenceFn(realStore)
+			globals["insert_implementation"] = makeInsertImplementationFn(realStore)
+			globals["insert_call_edge"] = makeInsertCallEdgeFn(realStore)
+			globals["insert_extension_binding"] = makeInsertExtensionBindingFn(realStore)
+
+			// Resolution query functions
+			globals["references_by_file"] = makeReferencesByFileFn(realStore)
+			globals["scopes_by_file"] = makeScopesByFileFn(realStore)
+			globals["imports_by_file"] = makeImportsByFileFn(realStore)
+			globals["type_members"] = makeTypeMembersFn(realStore)
+			globals["files_by_language"] = makeFilesByLanguageFn(realStore)
+			globals["symbols_by_kind"] = makeSymbolsByKindFn(realStore)
+			globals["scope_chain"] = makeScopeChainFn(realStore)
+			globals["batch_scope_chains"] = makeBatchScopeChainsFn(realStore)
+			globals["function_params"] = makeFunctionParamsFn(realStore)
+			globals["db_query"] = makeDBQueryFn(realStore)
+		}
 	}
 
 	for k, v := range extra {

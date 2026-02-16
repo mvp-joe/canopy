@@ -54,6 +54,7 @@ var (
 	flagForce      bool
 	flagLanguages  string
 	flagScriptsDir string
+	flagParallel   bool
 )
 
 var indexCmd = &cobra.Command{
@@ -68,6 +69,7 @@ func init() {
 	indexCmd.Flags().BoolVar(&flagForce, "force", false, "delete database and reindex from scratch")
 	indexCmd.Flags().StringVar(&flagLanguages, "languages", "", "comma-separated language filter (e.g. go,typescript)")
 	indexCmd.Flags().StringVar(&flagScriptsDir, "scripts-dir", "", "load scripts from disk path instead of embedded")
+	indexCmd.Flags().BoolVar(&flagParallel, "parallel", false, "enable parallel extraction (worker pool with batched writes)")
 }
 
 func runIndex(cmd *cobra.Command, args []string) error {
@@ -105,6 +107,10 @@ func runIndex(cmd *cobra.Command, args []string) error {
 			langs[i] = strings.TrimSpace(langs[i])
 		}
 		opts = append(opts, canopy.WithLanguages(langs...))
+	}
+
+	if flagParallel {
+		opts = append(opts, canopy.WithParallel(true))
 	}
 
 	// Script source: --scripts-dir overrides embedded FS.

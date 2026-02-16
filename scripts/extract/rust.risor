@@ -33,7 +33,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -329,8 +334,8 @@ func process_use_tree(node, prefix) {
 }
 
 // Extract a function_item or function_signature_item as a symbol.
-// Returns the symbol ID.
-func extract_function(fn_node, parent_sym_id) {
+// Returns the symbol ID and name (as a map).
+func extract_function(fn_node, parent_sym_id, symbol_map) {
   name_node := node_child(fn_node, "name")
   if name_node == nil {
     return nil
@@ -371,6 +376,7 @@ func extract_function(fn_node, parent_sym_id) {
   }
 
   sym_id := insert_symbol(sym_map)
+  symbol_map[name] = sym_id
 
   // Extract parameters
   if params_node != nil {
@@ -434,6 +440,9 @@ for _, m := range use_matches {
   }
 }
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Struct declarations ---
 struct_matches := query("(struct_item) @st", root)
 for _, m := range struct_matches {
@@ -455,6 +464,7 @@ for _, m := range struct_matches {
     end_line: end_line(st_node),
     end_col: end_col(st_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract fields
   body := node_child(st_node, "body")
@@ -511,6 +521,7 @@ for _, m := range enum_matches {
     end_line: end_line(en_node),
     end_col: end_col(en_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract variants as type_members
   body := node_child(en_node, "body")
@@ -555,6 +566,7 @@ for _, m := range trait_matches {
     end_line: end_line(tr_node),
     end_col: end_col(tr_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract trait methods (function_signature_item and function_item)
   body := node_child(tr_node, "body")
@@ -605,7 +617,7 @@ for _, m := range impl_matches {
   type_name := node_text(type_node)
 
   // Find the parent symbol for this impl
-  parent_id := find_symbol_id(type_name)
+  parent_id := find_symbol_id(type_name, symbol_ids)
 
   // Extract methods from the impl block
   body := node_child(impl_node, "body")
@@ -613,7 +625,7 @@ for _, m := range impl_matches {
     fn_matches := query("(function_item) @fn", body)
     for _, fm := range fn_matches {
       fn_node := fm["fn"]
-      extract_function(fn_node, parent_id)
+      extract_function(fn_node, parent_id, symbol_ids)
     }
   }
 }
@@ -624,7 +636,7 @@ count := int(root.NamedChildCount())
 for i := 0; i < count; i++ {
   child := root.NamedChild(i)
   if child.Type() == "function_item" {
-    extract_function(child, nil)
+    extract_function(child, nil, symbol_ids)
   }
 }
 
@@ -639,7 +651,7 @@ for _, m := range mod_matches {
   name := node_text(name_node)
   vis := extract_visibility(mod_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "module",
@@ -649,6 +661,7 @@ for _, m := range mod_matches {
     end_line: end_line(mod_node),
     end_col: end_col(mod_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract functions inside the module
   body := node_child(mod_node, "body")
@@ -656,7 +669,7 @@ for _, m := range mod_matches {
     fn_matches := query("(function_item) @fn", body)
     for _, fm := range fn_matches {
       fn_node := fm["fn"]
-      extract_function(fn_node, nil)
+      extract_function(fn_node, nil, symbol_ids)
     }
   }
 }
@@ -672,7 +685,7 @@ for _, m := range type_matches {
   name := node_text(name_node)
   vis := extract_visibility(ti_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "type_alias",
@@ -682,6 +695,7 @@ for _, m := range type_matches {
     end_line: end_line(ti_node),
     end_col: end_col(ti_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Constants ---
@@ -695,7 +709,7 @@ for _, m := range const_matches {
   name := node_text(name_node)
   vis := extract_visibility(c_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "constant",
@@ -705,6 +719,7 @@ for _, m := range const_matches {
     end_line: end_line(c_node),
     end_col: end_col(c_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Statics ---
@@ -718,7 +733,7 @@ for _, m := range static_matches {
   name := node_text(name_node)
   vis := extract_visibility(s_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "variable",
@@ -728,6 +743,7 @@ for _, m := range static_matches {
     end_line: end_line(s_node),
     end_col: end_col(s_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Macro definitions ---
@@ -740,7 +756,7 @@ for _, m := range macro_matches {
   }
   name := node_text(name_node)
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "function",
@@ -750,6 +766,7 @@ for _, m := range macro_matches {
     end_line: end_line(mac_node),
     end_col: end_col(mac_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Scope tree ---
@@ -769,7 +786,7 @@ for i := 0; i < int(root.NamedChildCount()); i++ {
     fn_nn := node_child(child, "name")
     fn_sym_id := nil
     if fn_nn != nil {
-      fn_sym_id = find_symbol_id(node_text(fn_nn))
+      fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
     }
     scope_map := {
       file_id: file_id,
@@ -813,7 +830,7 @@ for _, m := range impl_matches {
       fn_nn := node_child(fn_node, "name")
       fn_sym_id := nil
       if fn_nn != nil {
-        fn_sym_id = find_symbol_id(node_text(fn_nn))
+        fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
       }
       scope_map := {
         file_id: file_id,

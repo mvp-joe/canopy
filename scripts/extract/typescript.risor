@@ -41,7 +41,12 @@ func end_col(node) {
   return int(node.EndPoint().Column)
 }
 
-func find_symbol_id(name) {
+func find_symbol_id(name, symbol_map) {
+  // Check in-memory map first (for batched writes)
+  if name in symbol_map {
+    return symbol_map[name]
+  }
+  // Fallback to database query (for cross-file references)
   syms := symbols_by_file(file_id)
   for _, s := range syms {
     if s["name"] == name {
@@ -369,6 +374,9 @@ for _, m := range import_matches {
   }
 }
 
+// Track symbol IDs for later reference (needed for batched writes)
+symbol_ids := {}
+
 // --- Function declarations ---
 func_matches := query("(function_declaration name: (identifier) @name) @func", root)
 for _, m := range func_matches {
@@ -393,6 +401,7 @@ for _, m := range func_matches {
     end_line: end_line(func_node),
     end_col: end_col(func_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract parameters
   params_node := node_child(func_node, "parameters")
@@ -435,6 +444,7 @@ for _, cq := range class_queries {
       end_line: end_line(class_node),
       end_col: end_col(class_node),
     })
+    symbol_ids[name] = sym_id
 
     // Extract decorators on the class
     extract_decorators(sym_id, class_node)
@@ -572,6 +582,7 @@ for _, m := range iface_matches {
     end_line: end_line(iface_node),
     end_col: end_col(iface_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract type parameters
   extract_type_params(sym_id, iface_node)
@@ -656,6 +667,7 @@ for _, m := range alias_matches {
     end_line: end_line(alias_node),
     end_col: end_col(alias_node),
   })
+  symbol_ids[name] = sym_id
 
   extract_type_params(sym_id, alias_node)
 }
@@ -683,6 +695,7 @@ for _, m := range enum_matches {
     end_line: end_line(enum_node),
     end_col: end_col(enum_node),
   })
+  symbol_ids[name] = sym_id
 
   // Extract enum members
   body_matches := query("(enum_body) @body", enum_node)
@@ -742,6 +755,7 @@ for _, m := range ns_matches {
     end_line: end_line(ns_node),
     end_col: end_col(ns_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // --- Variable and constant declarations ---
@@ -758,7 +772,7 @@ for _, m := range var_matches {
     vis = "public"
   }
 
-  insert_symbol({
+  sym_id := insert_symbol({
     file_id: file_id,
     name: name,
     kind: "variable",
@@ -768,6 +782,7 @@ for _, m := range var_matches {
     end_line: end_line(stmt_node),
     end_col: end_col(stmt_node),
   })
+  symbol_ids[name] = sym_id
 }
 
 // let/const declarations (lexical_declaration)
@@ -804,6 +819,7 @@ for _, m := range lex_matches {
       end_line: end_line(stmt_node),
       end_col: end_col(stmt_node),
     })
+    symbol_ids[name] = sym_id
 
     // Extract arrow function parameters
     af_params := node_child(val_node, "parameters")
@@ -817,7 +833,7 @@ for _, m := range lex_matches {
     // Extract type parameters from arrow function
     extract_type_params(sym_id, val_node)
   } else {
-    insert_symbol({
+    sym_id := insert_symbol({
       file_id: file_id,
       name: name,
       kind: kind,
@@ -827,6 +843,7 @@ for _, m := range lex_matches {
       end_line: end_line(stmt_node),
       end_col: end_col(stmt_node),
     })
+    symbol_ids[name] = sym_id
   }
 }
 
@@ -884,7 +901,7 @@ for _, fsq := range fn_scope_queries {
     fn_nn := node_child(fn_node, "name")
     fn_sym_id := nil
     if fn_nn != nil {
-      fn_sym_id = find_symbol_id(node_text(fn_nn))
+      fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
     }
     scope_map := {
       file_id: file_id,
@@ -918,7 +935,7 @@ for _, csq := range class_scope_queries {
     cls_nn := node_child(cls_node, "name")
     cls_sym_id := nil
     if cls_nn != nil {
-      cls_sym_id = find_symbol_id(node_text(cls_nn))
+      cls_sym_id = find_symbol_id(node_text(cls_nn), symbol_ids)
     }
     scope_map := {
       file_id: file_id,
