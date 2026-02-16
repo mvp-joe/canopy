@@ -611,7 +611,7 @@ for _, f := range ts_files {
       ref_ctx = ref["context"]
     }
 
-    if ref_ctx != "call" {
+    if ref_ctx != "call" && ref_ctx != "field_access" {
       continue
     }
     if !(ref_id_str in resolved_set) {
@@ -628,6 +628,14 @@ for _, f := range ts_files {
     }
 
     target_sym_id := rr_rows[0]["target_symbol_id"]
+
+    // For field_access, only create call edges if the target is callable
+    if ref_ctx == "field_access" {
+      target_rows := db_query("SELECT kind FROM symbols WHERE id = ?", target_sym_id)
+      if len(target_rows) == 0 { continue }
+      tk := target_rows[0]["kind"]
+      if tk != "method" && tk != "function" { continue }
+    }
 
     // Find the caller function via scope chain
     ref_scope := find_scope_for_ref(scopes, ref)

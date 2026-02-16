@@ -628,3 +628,92 @@ func TestQuery_EndToEndChaining(t *testing.T) {
 		assert.NotNil(t, loc["start_col"], "location should have start_col")
 	}
 }
+
+// createMethodCallFixture creates a fixture with two Go files: types.go defines
+// a struct with a method, and main.go calls that method via a receiver.
+func createMethodCallFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+
+	typesFile := filepath.Join(dir, "types.go")
+	typesSrc := `package main
+
+type Server struct {
+	Name string
+}
+
+func (s *Server) Handle(req string) string {
+	return "ok"
+}
+
+func NewServer(name string) *Server {
+	return &Server{Name: name}
+}
+`
+	require.NoError(t, os.WriteFile(typesFile, []byte(typesSrc), 0o644))
+
+	mainFile := filepath.Join(dir, "main.go")
+	mainSrc := `package main
+
+import "fmt"
+
+func main() {
+	s := NewServer("test")
+	result := s.Handle("hello")
+	fmt.Println(result)
+}
+`
+	require.NoError(t, os.WriteFile(mainFile, []byte(mainSrc), 0o644))
+	return dir
+}
+
+// indexMethodCallFixture builds and indexes the method-call fixture.
+func indexMethodCallFixture(t *testing.T) (bin, fixtureDir string) {
+	t.Helper()
+	bin = buildBinary(t)
+	fixtureDir = createMethodCallFixture(t)
+
+	cmd := exec.Command(bin, "index", fixtureDir)
+	cmd.Dir = fixtureDir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "index failed: %s", string(out))
+	require.FileExists(t, filepath.Join(fixtureDir, ".canopy", "index.db"))
+
+	return bin, fixtureDir
+}
+
+func TestQuery_Callers_MethodCall(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	bin, fixtureDir := indexMethodCallFixture(t)
+
+	// Find the Handle method symbol. In types.go:
+	// line 6: func (s *Server) Handle(req string) string {
+	// "Handle" starts at col 19 (0-based).
+	symbolResult := runQuery(t, bin, fixtureDir, "symbol-at", "types.go", "6", "19")
+	require.NotNil(t, symbolResult["results"], "should find Handle method")
+	sym := symbolResult["results"].(map[string]any)
+	assert.Equal(t, "Handle", sym["name"])
+	symbolID := int64(sym["id"].(float64))
+
+	// Query callers of Handle — main() calls s.Handle("hello").
+	result := runQuery(t, bin, fixtureDir, "callers", "--symbol", formatInt64(symbolID))
+	assert.Equal(t, "callers", result["command"])
+	assert.Empty(t, result["error"])
+
+	results, ok := result["results"].([]any)
+	require.True(t, ok, "results should be an array")
+	assert.GreaterOrEqual(t, len(results), 1, "main() calls Handle, should have at least 1 caller")
+
+	// Verify one of the callers is the main function.
+	found := false
+	for _, r := range results {
+		edge := r.(map[string]any)
+		if edge["caller_name"] == "main" {
+			found = true
+		}
+	}
+	assert.True(t, found, "main should be listed as a caller of Handle")
+}

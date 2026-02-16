@@ -329,3 +329,37 @@ func TestDependents(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, imports)
 }
+
+func TestDependents_SuffixMatch(t *testing.T) {
+	q, s := newTestQueryBuilder(t)
+
+	fID, err := s.InsertFile(&store.File{
+		Path: "/a.go", Language: "go", Hash: "a", LastIndexed: time.Now(),
+	})
+	require.NoError(t, err)
+
+	_, err = s.InsertImport(&store.Import{
+		FileID: fID, Source: "github.com/example/util", Kind: "module", Scope: "file",
+	})
+	require.NoError(t, err)
+
+	// Exact match still works.
+	imports, err := q.Dependents("github.com/example/util")
+	require.NoError(t, err)
+	assert.Len(t, imports, 1, "exact match should find the import")
+
+	// Suffix match: just the last path segment.
+	imports, err = q.Dependents("util")
+	require.NoError(t, err)
+	assert.Len(t, imports, 1, "suffix 'util' should match 'github.com/example/util'")
+
+	// Suffix match: partial path.
+	imports, err = q.Dependents("example/util")
+	require.NoError(t, err)
+	assert.Len(t, imports, 1, "suffix 'example/util' should match")
+
+	// No match.
+	imports, err = q.Dependents("nope")
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}

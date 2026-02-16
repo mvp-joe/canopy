@@ -174,6 +174,7 @@ func (r *Runtime) buildGlobals(extra map[string]any) map[string]any {
 		globals["insert_function_param"] = makeInsertFunctionParamFn(r.store)
 		globals["insert_type_param"] = makeInsertTypeParamFn(r.store)
 		globals["insert_annotation"] = makeInsertAnnotationFn(r.store)
+		globals["update_annotation_resolved"] = makeUpdateAnnotationResolvedFn(r.store)
 
 		// Extraction query functions
 		globals["symbols_by_name"] = makeSymbolsByNameFn(r.store)

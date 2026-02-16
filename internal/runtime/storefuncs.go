@@ -258,6 +258,26 @@ func makeInsertAnnotationFn(s *store.Store) *object.Builtin {
 	})
 }
 
+func makeUpdateAnnotationResolvedFn(s *store.Store) *object.Builtin {
+	return object.NewBuiltin("update_annotation_resolved", func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 2 {
+			return object.NewArgsError("update_annotation_resolved", 2, len(args))
+		}
+		annID, ok := args[0].(*object.Int)
+		if !ok {
+			return object.Errorf("update_annotation_resolved: annotation_id must be int, got %s", args[0].Type())
+		}
+		symID, ok := args[1].(*object.Int)
+		if !ok {
+			return object.Errorf("update_annotation_resolved: resolved_symbol_id must be int, got %s", args[1].Type())
+		}
+		if err := s.UpdateAnnotationResolved(annID.Value(), symID.Value()); err != nil {
+			return object.Errorf("update_annotation_resolved: %v", err)
+		}
+		return object.Nil
+	})
+}
+
 // Helper to query symbols by name (needed by extraction scripts for
 // parent lookups, e.g., linking methods to receiver types).
 func makeSymbolsByNameFn(s *store.Store) *object.Builtin {

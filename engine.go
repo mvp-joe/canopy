@@ -1,11 +1,13 @@
 package canopy
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -370,8 +372,53 @@ var skipDirs = map[string]bool{
 }
 
 // IndexDirectory walks root and indexes all files with supported extensions.
-// Skips hidden directories, node_modules, vendor, and __pycache__.
+// If root is inside a git repository, uses git ls-files to respect .gitignore.
+// Falls back to filesystem walk (skipping hidden dirs, node_modules, vendor,
+// __pycache__) if git is unavailable.
 func (e *Engine) IndexDirectory(ctx context.Context, root string) error {
+	paths, err := e.gitListFiles(root)
+	if err != nil {
+		// Not a git repo or git not available — fall back to walk.
+		paths, err = e.walkListFiles(root)
+		if err != nil {
+			return err
+		}
+	}
+	return e.IndexFiles(ctx, paths)
+}
+
+// gitListFiles uses git ls-files to discover tracked and untracked (but not
+// ignored) files under root, filtered to supported languages.
+func (e *Engine) gitListFiles(root string) ([]string, error) {
+	// --cached: tracked files, --others: untracked files,
+	// --exclude-standard: respect .gitignore, .git/info/exclude, global excludes.
+	cmd := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard")
+	cmd.Dir = root
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git ls-files: %w", err)
+	}
+
+	var paths []string
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		absPath := filepath.Join(root, line)
+		if _, ok := runtime.LanguageForFile(absPath); ok {
+			paths = append(paths, absPath)
+		}
+	}
+	return paths, nil
+}
+
+// walkListFiles discovers files by walking the filesystem, used as a fallback
+// when git is not available. Skips hidden directories, node_modules, vendor,
+// and __pycache__.
+func (e *Engine) walkListFiles(root string) ([]string, error) {
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -390,9 +437,9 @@ func (e *Engine) IndexDirectory(ctx context.Context, root string) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("walk directory: %w", err)
+		return nil, fmt.Errorf("walk directory: %w", err)
 	}
-	return e.IndexFiles(ctx, paths)
+	return paths, nil
 }
 
 // Resolve runs resolution scripts for all languages that have indexed files.

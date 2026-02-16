@@ -467,6 +467,17 @@ func (s *Store) AnnotationsByTarget(symbolID int64) ([]*Annotation, error) {
 	return anns, rows.Err()
 }
 
+func (s *Store) UpdateAnnotationResolved(annotationID, resolvedSymbolID int64) error {
+	_, err := s.db.Exec(
+		`UPDATE annotations SET resolved_symbol_id = ? WHERE id = ?`,
+		resolvedSymbolID, annotationID,
+	)
+	if err != nil {
+		return fmt.Errorf("update annotation resolved: %w", err)
+	}
+	return nil
+}
+
 // --- SymbolFragment operations ---
 
 func (s *Store) InsertSymbolFragment(frag *SymbolFragment) (int64, error) {

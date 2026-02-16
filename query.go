@@ -177,10 +177,12 @@ func (q *QueryBuilder) Dependencies(fileID int64) ([]*store.Import, error) {
 }
 
 // Dependents returns all imports across all files that reference the given source.
+// Matches both exact source strings and suffix matches (e.g. "util" matches
+// "github.com/example/util").
 func (q *QueryBuilder) Dependents(source string) ([]*store.Import, error) {
 	rows, err := q.store.DB().Query(
-		"SELECT id, file_id, source, imported_name, local_alias, kind, scope FROM imports WHERE source = ?",
-		source,
+		"SELECT id, file_id, source, imported_name, local_alias, kind, scope FROM imports WHERE source = ? OR source LIKE ?",
+		source, "%/"+source,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dependents: %w", err)
