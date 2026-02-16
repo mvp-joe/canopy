@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Canopy is a Go library for deterministic, scope-aware semantic code analysis built on tree-sitter. It bridges tree-sitter's concrete syntax tree and full LSP semantic understanding. The Go core is intentionally thin — it provides tree-sitter parsing, a SQLite store, and a Risor scripting runtime. All language-specific logic (extraction and resolution) lives in Risor scripts that receive tree-sitter objects and the Store directly, with no wrappers. The primary consumer is project-cortex, a Go-based MCP server for AI coding assistants. Target: >90% accuracy on core semantic operations across 8 languages (Go, TS/JS, Python, Rust, C/C++, Java, PHP, Ruby).
 
-**Current status:** Planning phase. Spec is complete, spike validated Risor ↔ tree-sitter interop, implementation not yet started.
+**Current status:** Implementation well underway. Three specs implemented (core semantic bridge, discovery/search API, CLI tool). All 10 languages have extraction and resolution scripts with golden tests for 9 languages. 519 tests across 31 files.
 
 ## Build Commands
 
