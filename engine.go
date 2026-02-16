@@ -20,6 +20,7 @@ type Engine struct {
 	store      *store.Store
 	runtime    *runtime.Runtime
 	scriptsDir string
+	scriptsFS  fs.FS
 	languages  map[string]bool // nil means all languages
 
 	// blastRadius accumulates file IDs that need re-resolution after indexing.
@@ -40,8 +41,22 @@ func WithLanguages(languages ...string) Option {
 	}
 }
 
+// WithScriptsFS configures the Engine to load Risor scripts from the given
+// filesystem instead of from the scriptsDir path on disk. This enables
+// embedding scripts via go:embed. When set, scriptsDir is ignored for
+// script loading but may still be used as a label in error messages.
+func WithScriptsFS(fsys fs.FS) Option {
+	return func(e *Engine) {
+		e.scriptsFS = fsys
+	}
+}
+
 // New creates an Engine backed by a SQLite database at dbPath.
-// Scripts are loaded from scriptsDir.
+// Script loading priority:
+//  1. If WithScriptsFS is set, use the provided fs.FS
+//  2. Otherwise, use scriptsDir on disk
+//
+// The scriptsDir parameter may be empty when WithScriptsFS is used.
 func New(dbPath string, scriptsDir string, opts ...Option) (*Engine, error) {
 	s, err := store.NewStore(dbPath)
 	if err != nil {
@@ -52,14 +67,23 @@ func New(dbPath string, scriptsDir string, opts ...Option) (*Engine, error) {
 		return nil, fmt.Errorf("canopy: migrate: %w", err)
 	}
 
+	// Apply options to a temporary Engine to collect configuration before
+	// creating the Runtime, since the Runtime needs to know about fs.FS.
 	e := &Engine{
 		store:      s,
-		runtime:    runtime.NewRuntime(s, scriptsDir),
 		scriptsDir: scriptsDir,
 	}
 	for _, opt := range opts {
 		opt(e)
 	}
+
+	// Build Runtime with the appropriate script source.
+	var rtOpts []runtime.RuntimeOption
+	if e.scriptsFS != nil {
+		rtOpts = append(rtOpts, runtime.WithRuntimeFS(e.scriptsFS))
+	}
+	e.runtime = runtime.NewRuntime(s, scriptsDir, rtOpts...)
+
 	return e, nil
 }
 
@@ -313,13 +337,13 @@ func (e *Engine) computeBlastRadius(fileID int64, oldSyms, newSyms []capturedSym
 					"%/"+pkgName,
 				)
 				if err == nil {
-					defer rows.Close()
 					for rows.Next() {
 						var fid int64
 						if err := rows.Scan(&fid); err == nil {
 							result[fid] = true
 						}
 					}
+					rows.Close()
 				}
 				break
 			}

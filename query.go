@@ -12,6 +12,12 @@ type QueryBuilder struct {
 	store *store.Store
 }
 
+// NewQueryBuilder creates a QueryBuilder from a Store.
+// Used by the CLI for query commands that don't need the Engine.
+func NewQueryBuilder(s *store.Store) *QueryBuilder {
+	return &QueryBuilder{store: s}
+}
+
 // Location represents a source code position range.
 // All line and column numbers are 0-based, matching the tree-sitter convention.
 type Location struct {

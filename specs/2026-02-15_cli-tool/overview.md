@@ -34,7 +34,7 @@ Adds a standalone CLI binary (`cmd/canopy/`) to the canopy library, enabling any
 
 ## Current Status
 
-Planning
+Complete
 
 ## Key Files
 

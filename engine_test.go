@@ -225,3 +225,116 @@ func TestDistinctLanguages(t *testing.T) {
 	assert.Contains(t, langs, "go")
 	assert.Contains(t, langs, "python")
 }
+
+// --- WithScriptsFS tests ---
+
+func TestNew_WithScriptsFS_RunsExtraction(t *testing.T) {
+	// Use os.DirFS to load actual scripts from the repo's scripts/ directory.
+	// This proves WithScriptsFS works end-to-end with real extraction scripts.
+	scriptsFS := os.DirFS("scripts")
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	e, err := New(dbPath, "", WithScriptsFS(scriptsFS))
+	require.NoError(t, err)
+	defer e.Close()
+
+	// Write a simple Go file to index.
+	goFile := filepath.Join(t.TempDir(), "main.go")
+	require.NoError(t, os.WriteFile(goFile, []byte(`package main
+
+func Hello() string {
+	return "hello"
+}
+`), 0644))
+
+	err = e.IndexFiles(context.Background(), []string{goFile})
+	require.NoError(t, err)
+
+	// Verify extraction produced symbols.
+	f, err := e.Store().FileByPath(goFile)
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	syms, err := e.Store().SymbolsByFile(f.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, syms, "expected symbols from extraction")
+
+	// Should have at least a package symbol and a function symbol.
+	var kinds []string
+	for _, sym := range syms {
+		kinds = append(kinds, sym.Kind)
+	}
+	assert.Contains(t, kinds, "package")
+	assert.Contains(t, kinds, "function")
+}
+
+func TestNew_WithScriptsFS_TakesPrecedenceOverScriptsDir(t *testing.T) {
+	// Even if scriptsDir is set to a nonexistent path, WithScriptsFS
+	// should take precedence and scripts should load from the FS.
+	scriptsFS := os.DirFS("scripts")
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	e, err := New(dbPath, "/nonexistent/scripts/path", WithScriptsFS(scriptsFS))
+	require.NoError(t, err)
+	defer e.Close()
+
+	goFile := filepath.Join(t.TempDir(), "main.go")
+	require.NoError(t, os.WriteFile(goFile, []byte(`package main
+
+func Add(a, b int) int { return a + b }
+`), 0644))
+
+	err = e.IndexFiles(context.Background(), []string{goFile})
+	require.NoError(t, err)
+
+	f, err := e.Store().FileByPath(goFile)
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	syms, err := e.Store().SymbolsByFile(f.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, syms)
+}
+
+func TestNew_WithoutScriptsFS_PreservesExistingBehavior(t *testing.T) {
+	// Without WithScriptsFS, should use scriptsDir (disk-based loading).
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	e, err := New(dbPath, "scripts")
+	require.NoError(t, err)
+	defer e.Close()
+
+	goFile := filepath.Join(t.TempDir(), "main.go")
+	require.NoError(t, os.WriteFile(goFile, []byte(`package main
+
+var x = 1
+`), 0644))
+
+	err = e.IndexFiles(context.Background(), []string{goFile})
+	require.NoError(t, err)
+
+	f, err := e.Store().FileByPath(goFile)
+	require.NoError(t, err)
+	require.NotNil(t, f)
+}
+
+func TestNewQueryBuilder(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.NewStore(dbPath)
+	require.NoError(t, err)
+	defer s.Close()
+	require.NoError(t, s.Migrate())
+
+	qb := NewQueryBuilder(s)
+	require.NotNil(t, qb)
+
+	// Should be able to query (returns nil for nonexistent file, no error).
+	sym, err := qb.SymbolAt("nonexistent.go", 0, 0)
+	require.NoError(t, err)
+	assert.Nil(t, sym)
+
+	// Discovery queries should also work on an empty DB.
+	result, err := qb.Symbols(SymbolFilter{}, Sort{}, Pagination{Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.TotalCount)
+	assert.Empty(t, result.Items)
+}

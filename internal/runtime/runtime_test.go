@@ -5,8 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	sitter "github.com/smacker/go-tree-sitter"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const goTestSource = `package main
@@ -726,4 +729,165 @@ func TestResolutionScriptPath(t *testing.T) {
 	if got != filepath.Join("resolve", "go.risor") {
 		t.Errorf("ResolutionScriptPath(\"go\") = %q", got)
 	}
+}
+
+// --- fs.FS-based script loading tests ---
+
+func TestLoadScript_FromFSFS(t *testing.T) {
+	t.Parallel()
+
+	content := `x := 42`
+	mapFS := fstest.MapFS{
+		"extract/go.risor": &fstest.MapFile{Data: []byte(content)},
+	}
+
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+
+	got, err := rt.LoadScript("extract/go.risor")
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestLoadScript_FromFSFS_NotFound(t *testing.T) {
+	t.Parallel()
+
+	mapFS := fstest.MapFS{}
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+
+	_, err := rt.LoadScript("nonexistent.risor")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "from fs")
+}
+
+func TestLoadScript_FromFSFS_StripsLeadingSeparator(t *testing.T) {
+	t.Parallel()
+
+	content := `y := 99`
+	mapFS := fstest.MapFS{
+		"extract/go.risor": &fstest.MapFile{Data: []byte(content)},
+	}
+
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+
+	// Absolute-style path should be resolved within the FS.
+	got, err := rt.LoadScript("/extract/go.risor")
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestLoadScript_FallsBackToDisk(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `z := 7`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.risor"), []byte(content), 0644))
+
+	// No WithRuntimeFS -- should fall back to disk.
+	rt := NewRuntime(nil, dir)
+
+	got, err := rt.LoadScript("test.risor")
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestRunScript_FromFSFS(t *testing.T) {
+	mapFS := fstest.MapFS{
+		"test.risor": &fstest.MapFile{Data: []byte(`result := 1 + 1`)},
+	}
+
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+	err := rt.RunScript(context.Background(), "test.risor", nil)
+	require.NoError(t, err)
+}
+
+// --- Importer wiring tests ---
+
+func TestImport_FSImporter(t *testing.T) {
+	// Risor's FSImporter resolves "lib_helpers" by trying name + ".risor",
+	// so the file must be at the flat path "lib_helpers.risor" in the FS.
+	mapFS := fstest.MapFS{
+		"lib_helpers.risor": &fstest.MapFile{Data: []byte(`
+func greet(name) {
+	return "hello " + name
+}
+`)},
+	}
+
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+
+	script := `
+import lib_helpers
+
+msg := lib_helpers.greet("world")
+assert(msg == "hello world", 'expected "hello world", got ' + msg)
+`
+	err := rt.RunSource(context.Background(), script, nil)
+	require.NoError(t, err)
+}
+
+func TestImport_LocalImporter(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a module file to disk.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "math_utils.risor"), []byte(`
+func double(x) {
+	return x * 2
+}
+`), 0644))
+
+	rt := NewRuntime(nil, dir)
+
+	script := `
+import math_utils
+
+result := math_utils.double(21)
+assert(result == 42, 'expected 42, got {result}')
+`
+	err := rt.RunSource(context.Background(), script, nil)
+	require.NoError(t, err)
+}
+
+func TestImport_GlobalsAvailableInImportedModules(t *testing.T) {
+	// Verify that imported modules can reference host-provided globals.
+	// The log global is always available (provided by buildGlobals).
+	mapFS := fstest.MapFS{
+		"helper.risor": &fstest.MapFile{Data: []byte(`
+// This module references the "log" global provided by the host.
+// If global names aren't passed to the importer, this will fail to compile.
+func do_log(msg) {
+	log.Info(msg)
+}
+`)},
+	}
+
+	rt := NewRuntime(nil, "", WithRuntimeFS(mapFS))
+
+	script := `
+import helper
+helper.do_log("test message")
+`
+	err := rt.RunSource(context.Background(), script, nil)
+	require.NoError(t, err)
+}
+
+func TestRunSource_NoImport_NoRegression(t *testing.T) {
+	// Scripts without import statements should work regardless of importer config.
+	rt := NewRuntime(nil, "")
+
+	script := `
+x := 1 + 2
+assert(x == 3, 'expected 3')
+`
+	err := rt.RunSource(context.Background(), script, nil)
+	require.NoError(t, err)
+}
+
+func TestNewRuntime_BackwardCompatible(t *testing.T) {
+	// Existing callers using NewRuntime(store, dir) with no options should still work.
+	t.Parallel()
+
+	rt := NewRuntime(nil, "/some/dir")
+	require.NotNil(t, rt)
+	assert.Nil(t, rt.fsys)
+	assert.Equal(t, "/some/dir", rt.scriptsDir)
 }
