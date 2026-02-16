@@ -7,7 +7,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Store is the SQLite data access layer for canopy's 16 tables.
+// Store is the SQLite data access layer for canopy's 17 tables.
 type Store struct {
 	db *sql.DB
 }
@@ -35,7 +35,7 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
-// Migrate creates all 16 tables and indexes. Idempotent.
+// Migrate creates all 17 tables and indexes. Idempotent.
 func (s *Store) Migrate() error {
 	_, err := s.db.Exec(schemaDDL)
 	if err != nil {

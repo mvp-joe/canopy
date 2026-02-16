@@ -84,7 +84,11 @@ Canopy includes a command-line tool for indexing and querying.
 canopy index [path]              # Index a project (extraction + resolution)
 canopy index --force [path]      # Delete DB and reindex from scratch
 canopy index --languages go,rust # Index specific languages only
+canopy index --scripts-dir ./scripts  # Load scripts from disk (dev mode)
+canopy index --parallel          # Enable parallel extraction (default)
 ```
+
+The CLI auto-detects when embedded Risor scripts have changed since the last index and rebuilds the database from scratch.
 
 ### Query
 
@@ -125,7 +129,7 @@ Risor scripts are embedded in the binary at build time. For development, use `--
 
 ```
 canopy/                    # Engine — orchestrator, file discovery, change detection
-internal/store/            # SQLite data layer (16 tables, WAL mode)
+internal/store/            # SQLite data layer (17 tables, WAL mode)
 internal/runtime/          # Risor VM embedding, host functions
 scripts/extract/{lang}.risor  # Language-specific extraction scripts
 scripts/resolve/{lang}.risor  # Language-specific resolution scripts

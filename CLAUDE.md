@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Canopy is a Go library for deterministic, scope-aware semantic code analysis built on tree-sitter. It bridges tree-sitter's concrete syntax tree and full LSP semantic understanding. The Go core is intentionally thin — it provides tree-sitter parsing, a SQLite store, and a Risor scripting runtime. All language-specific logic (extraction and resolution) lives in Risor scripts that receive tree-sitter objects and the Store directly, with no wrappers. The primary consumer is project-cortex, a Go-based MCP server for AI coding assistants. Target: >90% accuracy on core semantic operations across 8 languages (Go, TS/JS, Python, Rust, C/C++, Java, PHP, Ruby).
 
-**Current status:** Implementation well underway. Three specs implemented (core semantic bridge, discovery/search API, CLI tool). All 10 languages have extraction and resolution scripts with golden tests for 9 languages. 519 tests across 31 files.
+**Current status:** Implementation well underway. Three specs implemented (core semantic bridge, discovery/search API, CLI tool). All 10 languages have extraction and resolution scripts with golden tests. 519 tests across 31 files.
 
 ## Build Commands
 
@@ -32,8 +32,8 @@ Source Files → Engine → tree-sitter Parse → Extraction Scripts → SQLite 
 
 ### Core Components
 
-- **Engine** (`canopy/`) — Top-level orchestrator. File discovery, change detection (hash-based), script dispatch, query API for cortex.
-- **Store** (`internal/store/`) — SQLite data layer. 16 tables (10 extraction + 6 resolution), WAL mode, blast radius methods for incremental re-resolution.
+- **Engine** (`canopy/`) — Top-level orchestrator. File discovery, change detection (hash-based), script dispatch, query API for cortex. Parallel extraction with batched writes (default). Auto-rebuilds DB when embedded Risor scripts change (`ScriptsChanged()`).
+- **Store** (`internal/store/`) — SQLite data layer. 17 tables (10 extraction + 6 resolution + 1 metadata), WAL mode, blast radius methods for incremental re-resolution. Metadata table stores key-value pairs (e.g., scripts hash for auto-rebuild detection).
 - **Risor Runtime** (`internal/runtime/`) — Embeds Risor VM. Exposes globals to scripts: `parse(path, language)`, `node_text(node)`, `query(pattern, node)`, `db` (Store), `log`.
 - **Extraction Scripts** (`scripts/extract/{language}.risor`) — One per language. Walk CST via tree-sitter, write to extraction tables.
 - **Resolution Scripts** (`scripts/resolve/{language}.risor`) — One per language. Query extraction tables, write resolution tables. No tree-sitter access.
@@ -66,12 +66,12 @@ Import the modules at the top of the script: `import filepath` / `import strings
 
 ## Spec and Reference
 
-- **Spec root:** `specs/implemented/2026-02-14_semantic-bridge/` — 8 files covering architecture, schema (16 tables, v3), interfaces, 7-phase implementation plan, test strategy, dependencies, decisions.
+- **Spec root:** `specs/implemented/2026-02-14_semantic-bridge/` — 8 files covering architecture, schema (v3), interfaces, 7-phase implementation plan, test strategy, dependencies, decisions. Note: spec still documents 16 tables; the 17th (metadata) was added post-spec.
 - **Spike:** `.spikes/risor-treesitter/` — Proof-of-concept validating Risor ↔ tree-sitter interop. Run with `cd .spikes/risor-treesitter && go build -o spike && ./spike`.
 - **LSP references:** `.scratch/` — Cloned LSP implementations (gopls, tsserver, pyright, etc.) for oracle verification during development. Populated via `/clone-lsps` command.
 
 ## Testing Strategy
 
 - **Unit tests:** Go tests for Store CRUD, schema migration, tree-sitter host functions, extraction/resolution per language.
-- **Golden tests:** `testdata/{language}/level-{N}-{name}/` directories with `src/` and `golden.json`. Three tiers: extraction (Tier 1), simple resolution (Tier 2), full resolution (Tier 3). Run via `canopy test testdata/`.
+- **Golden tests:** `testdata/{language}/level-{N}-{name}/` directories with `src/` and `golden.json`. Two tiers: extraction-only (no resolution keys in golden.json), and resolution (golden.json includes `references`, `implementations`, or `calls`). Run via `go test ./...` (`TestGolden` in `golden_test.go`).
 - **MCP verification:** Dev-time only (not CI). LLM runs canopy, queries real LSP via MCP, iterates on Risor scripts until >90% accuracy, then writes golden fixtures.
