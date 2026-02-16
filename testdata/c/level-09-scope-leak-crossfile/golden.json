@@ -1,0 +1,18 @@
+{
+  "definitions": [
+    { "name": "helper", "kind": "function", "file": "util.h", "line": 0 },
+    { "name": "helper", "kind": "function", "file": "util.c", "line": 0 },
+    { "name": "result", "kind": "variable", "file": "util.c", "line": 1 },
+    { "name": "main", "kind": "function", "file": "main.c", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "helper() in main resolves to util.h prototype, not to local var result in util.c",
+      "from": { "file": "main.c", "line": 3, "col": 14 },
+      "to": { "name": "helper", "file": "util.h", "line": 0 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "helper" }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "definitions": [
+    { "name": "handleA", "kind": "function", "file": "handlers.js", "line": 0 },
+    { "name": "cfg", "kind": "constant", "file": "handlers.js", "line": 1 },
+    { "name": "handleB", "kind": "function", "file": "handlers.js", "line": 5 },
+    { "name": "cfg", "kind": "constant", "file": "handlers.js", "line": 6 }
+  ],
+  "references": [
+    {
+      "_comment": "cfg.run() in handleA should resolve to handleA's cfg (line 1)",
+      "from": { "file": "handlers.js", "line": 2, "col": 9 },
+      "to": { "name": "cfg", "file": "handlers.js", "line": 1 }
+    },
+    {
+      "_comment": "cfg.run() in handleB should resolve to handleB's cfg (line 6), NOT handleA's cfg (line 1)",
+      "from": { "file": "handlers.js", "line": 7, "col": 9 },
+      "to": { "name": "cfg", "file": "handlers.js", "line": 6 }
+    }
+  ]
+}

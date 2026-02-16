@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "Calc", "kind": "class", "file": "Calc.java", "line": 0 },
+    { "name": "compute", "kind": "method", "file": "Calc.java", "line": 1 },
+    { "name": "Inner", "kind": "class", "file": "Calc.java", "line": 5 },
+    { "name": "compute", "kind": "method", "file": "Calc.java", "line": 6 },
+    { "name": "run", "kind": "method", "file": "Calc.java", "line": 10 }
+  ],
+  "references": [
+    {
+      "_comment": "compute() in Inner.run() resolves to Inner.compute, not Calc.compute",
+      "from": { "file": "Calc.java", "line": 11, "col": 19 },
+      "to": { "name": "compute", "file": "Calc.java", "line": 6 }
+    }
+  ]
+}

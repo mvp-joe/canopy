@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "Config", "kind": "class", "file": "config.rb", "line": 0 },
+    { "name": "load", "kind": "method", "file": "config.rb", "line": 1 },
+    { "name": "Worker", "kind": "class", "file": "worker.rb", "line": 0 },
+    { "name": "process", "kind": "method", "file": "worker.rb", "line": 1 }
+  ],
+  "references": [
+    {
+      "_comment": "Config ref in process resolves to Config class in config.rb",
+      "from": { "file": "worker.rb", "line": 2, "col": 4 },
+      "to": { "name": "Config", "file": "config.rb", "line": 0 }
+    },
+    {
+      "_comment": "load() in process resolves to Config.load in config.rb",
+      "from": { "file": "worker.rb", "line": 2, "col": 11 },
+      "to": { "name": "load", "file": "config.rb", "line": 1 }
+    }
+  ],
+  "calls": [
+    { "caller": "process", "callee": "load" }
+  ]
+}

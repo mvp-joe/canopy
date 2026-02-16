@@ -48,6 +48,52 @@ func find_symbol_id(name, symbol_map) {
   return nil
 }
 
+func find_innermost_scope_id(all_scopes, line, col) {
+  best_id := nil
+  best_size := -1
+  for _, sc := range all_scopes {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if line > sl && line < el {
+      inside = true
+    } else if line == sl && line == el {
+      inside = col >= sc_col && col <= ec
+    } else if line == sl {
+      inside = col >= sc_col
+    } else if line == el {
+      inside = col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best_id == nil || size < best_size {
+        best_id = sc["id"]
+        best_size = size
+      }
+    }
+  }
+  return best_id
+}
+
+func insert_ref_with_scope(name, context, node, all_scopes) {
+  ref := {
+    file_id: file_id,
+    name: name,
+    context: context,
+    start_line: start_line(node),
+    start_col: start_col(node),
+    end_line: end_line(node),
+    end_col: end_col(node),
+  }
+  sid := find_innermost_scope_id(all_scopes, start_line(node), start_col(node))
+  if sid != nil {
+    ref["scope_id"] = sid
+  }
+  insert_reference(ref)
+}
+
 // extract_visibility examines a modifiers node and returns the Java visibility.
 // Returns "package" for default (package-private) visibility.
 func extract_visibility(mods_node) {
@@ -211,7 +257,7 @@ func extract_annotations(target_sym_id, mods_node) {
 }
 
 // extract_block_scopes recursively finds block-creating statements and inserts scopes.
-func extract_block_scopes(node, parent_scope_id) {
+func extract_block_scopes(node, parent_scope_id, all_scopes) {
   block_types := ["if_statement", "for_statement", "enhanced_for_statement",
                    "while_statement", "switch_expression", "try_statement",
                    "do_statement", "synchronized_statement"]
@@ -238,9 +284,16 @@ func extract_block_scopes(node, parent_scope_id) {
         end_col: end_col(child),
         parent_scope_id: parent_scope_id,
       })
-      extract_block_scopes(child, block_scope_id)
+      all_scopes[string(block_scope_id)] = {
+        id: block_scope_id,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
+      extract_block_scopes(child, block_scope_id, all_scopes)
     } else {
-      extract_block_scopes(child, parent_scope_id)
+      extract_block_scopes(child, parent_scope_id, all_scopes)
     }
   }
 }
@@ -253,7 +306,8 @@ func extract_block_scopes(node, parent_scope_id) {
 // parent_scope_id: scope ID of the parent scope.
 // is_interface: true if the parent is an interface (affects default visibility).
 // symbol_map: map of symbol names to IDs for batched writes.
-func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, symbol_map) {
+// all_scopes: map of scope_id_str -> scope info for scope_id lookups on references.
+func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, symbol_map, all_scopes) {
   nt := node.Type()
 
   if nt == "field_declaration" {
@@ -369,7 +423,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
 
     extract_annotations(sym_id, mods_node)
 
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "function",
       start_line: start_line(node),
@@ -379,11 +433,18 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       parent_scope_id: parent_scope_id,
       symbol_id: sym_id,
     }
-    method_scope_id := insert_scope(scope_map)
+    method_scope_id := insert_scope(scope_data)
+    all_scopes[string(method_scope_id)] = {
+      id: method_scope_id,
+      start_line: start_line(node),
+      start_col: start_col(node),
+      end_line: end_line(node),
+      end_col: end_col(node),
+    }
 
     body_node := node_child(node, "body")
     if body_node != nil {
-      extract_block_scopes(body_node, method_scope_id)
+      extract_block_scopes(body_node, method_scope_id, all_scopes)
     }
 
   } else if nt == "constructor_declaration" {
@@ -427,7 +488,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
 
     extract_annotations(sym_id, mods_node)
 
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "function",
       start_line: start_line(node),
@@ -437,11 +498,18 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       parent_scope_id: parent_scope_id,
       symbol_id: sym_id,
     }
-    ctor_scope_id := insert_scope(scope_map)
+    ctor_scope_id := insert_scope(scope_data)
+    all_scopes[string(ctor_scope_id)] = {
+      id: ctor_scope_id,
+      start_line: start_line(node),
+      start_col: start_col(node),
+      end_line: end_line(node),
+      end_col: end_col(node),
+    }
 
     body_node := node_child(node, "body")
     if body_node != nil {
-      extract_block_scopes(body_node, ctor_scope_id)
+      extract_block_scopes(body_node, ctor_scope_id, all_scopes)
     }
 
   } else if nt == "class_declaration" {
@@ -474,7 +542,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
     extract_type_params(sym_id, node)
     extract_annotations(sym_id, mods_node)
 
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "class",
       start_line: start_line(node),
@@ -484,9 +552,16 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       symbol_id: sym_id,
     }
     if parent_scope_id != nil {
-      scope_map["parent_scope_id"] = parent_scope_id
+      scope_data["parent_scope_id"] = parent_scope_id
     }
-    class_scope_id := insert_scope(scope_map)
+    class_scope_id := insert_scope(scope_data)
+    all_scopes[string(class_scope_id)] = {
+      id: class_scope_id,
+      start_line: start_line(node),
+      start_col: start_col(node),
+      end_line: end_line(node),
+      end_col: end_col(node),
+    }
 
     // Superclass reference
     super_node := node_child(node, "superclass")
@@ -507,15 +582,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
               }
             }
           }
-          insert_reference({
-            file_id: file_id,
-            name: ref_name,
-            context: "type_annotation",
-            start_line: start_line(child),
-            start_col: start_col(child),
-            end_line: end_line(child),
-            end_col: end_col(child),
-          })
+          insert_ref_with_scope(ref_name, "type_annotation", child, all_scopes)
         }
       }
     }
@@ -526,15 +593,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       iface_type_matches := query("(super_interfaces (type_list (type_identifier) @type))", iface_node)
       for _, m := range iface_type_matches {
         tn := m["type"]
-        insert_reference({
-          file_id: file_id,
-          name: node_text(tn),
-          context: "type_annotation",
-          start_line: start_line(tn),
-          start_col: start_col(tn),
-          end_line: end_line(tn),
-          end_col: end_col(tn),
-        })
+        insert_ref_with_scope(node_text(tn), "type_annotation", tn, all_scopes)
       }
     }
 
@@ -544,7 +603,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       body_count := int(body_node.NamedChildCount())
       for i := 0; i < body_count; i++ {
         member := body_node.NamedChild(i)
-        extract_declaration(member, sym_id, class_scope_id, false, symbol_map)
+        extract_declaration(member, sym_id, class_scope_id, false, symbol_map, all_scopes)
       }
     }
 
@@ -578,7 +637,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
     extract_type_params(sym_id, node)
     extract_annotations(sym_id, mods_node)
 
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "class",
       start_line: start_line(node),
@@ -588,16 +647,23 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       symbol_id: sym_id,
     }
     if parent_scope_id != nil {
-      scope_map["parent_scope_id"] = parent_scope_id
+      scope_data["parent_scope_id"] = parent_scope_id
     }
-    iface_scope_id := insert_scope(scope_map)
+    iface_scope_id := insert_scope(scope_data)
+    all_scopes[string(iface_scope_id)] = {
+      id: iface_scope_id,
+      start_line: start_line(node),
+      start_col: start_col(node),
+      end_line: end_line(node),
+      end_col: end_col(node),
+    }
 
     body_node := node_child(node, "body")
     if body_node != nil {
       body_count := int(body_node.NamedChildCount())
       for i := 0; i < body_count; i++ {
         member := body_node.NamedChild(i)
-        extract_declaration(member, sym_id, iface_scope_id, true, symbol_map)
+        extract_declaration(member, sym_id, iface_scope_id, true, symbol_map, all_scopes)
       }
     }
 
@@ -630,7 +696,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
 
     extract_annotations(sym_id, mods_node)
 
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "class",
       start_line: start_line(node),
@@ -640,9 +706,16 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
       symbol_id: sym_id,
     }
     if parent_scope_id != nil {
-      scope_map["parent_scope_id"] = parent_scope_id
+      scope_data["parent_scope_id"] = parent_scope_id
     }
-    insert_scope(scope_map)
+    enum_scope_id := insert_scope(scope_data)
+    all_scopes[string(enum_scope_id)] = {
+      id: enum_scope_id,
+      start_line: start_line(node),
+      start_col: start_col(node),
+      end_line: end_line(node),
+      end_col: end_col(node),
+    }
 
     body_node := node_child(node, "body")
     if body_node != nil {
@@ -669,7 +742,7 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
         mt := member.Type()
         // Skip enum constants (already handled above)
         if mt != "enum_constant" {
-          extract_declaration(member, sym_id, nil, false, symbol_map)
+          extract_declaration(member, sym_id, enum_scope_id, false, symbol_map, all_scopes)
         }
       }
     }
@@ -764,6 +837,7 @@ for _, m := range import_matches {
 }
 
 // --- File scope ---
+all_scopes := {}
 file_scope_id := insert_scope({
   file_id: file_id,
   kind: "file",
@@ -772,6 +846,13 @@ file_scope_id := insert_scope({
   end_line: end_line(root),
   end_col: end_col(root),
 })
+all_scopes[string(file_scope_id)] = {
+  id: file_scope_id,
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+}
 
 // --- Top-level declarations ---
 root_count := int(root.NamedChildCount())
@@ -779,7 +860,7 @@ for i := 0; i < root_count; i++ {
   child := root.NamedChild(i)
   ct := child.Type()
   if ct == "class_declaration" || ct == "interface_declaration" || ct == "enum_declaration" {
-    extract_declaration(child, nil, file_scope_id, false, symbol_ids)
+    extract_declaration(child, nil, file_scope_id, false, symbol_ids, all_scopes)
   }
 }
 
@@ -791,52 +872,20 @@ for _, m := range method_inv_matches {
   inv := m["inv"]
   inv_name := node_child(inv, "name")
   if inv_name != nil {
-    insert_reference({
-      file_id: file_id,
-      name: node_text(inv_name),
-      context: "call",
-      start_line: start_line(inv_name),
-      start_col: start_col(inv_name),
-      end_line: end_line(inv_name),
-      end_col: end_col(inv_name),
-    })
+    insert_ref_with_scope(node_text(inv_name), "call", inv_name, all_scopes)
   }
   inv_obj := node_child(inv, "object")
   if inv_obj != nil {
     if inv_obj.Type() == "identifier" {
-      insert_reference({
-        file_id: file_id,
-        name: node_text(inv_obj),
-        context: "call",
-        start_line: start_line(inv_obj),
-        start_col: start_col(inv_obj),
-        end_line: end_line(inv_obj),
-        end_col: end_col(inv_obj),
-      })
+      insert_ref_with_scope(node_text(inv_obj), "call", inv_obj, all_scopes)
     } else if inv_obj.Type() == "field_access" {
       fa_field := node_child(inv_obj, "field")
       if fa_field != nil {
-        insert_reference({
-          file_id: file_id,
-          name: node_text(fa_field),
-          context: "field_access",
-          start_line: start_line(fa_field),
-          start_col: start_col(fa_field),
-          end_line: end_line(fa_field),
-          end_col: end_col(fa_field),
-        })
+        insert_ref_with_scope(node_text(fa_field), "field_access", fa_field, all_scopes)
       }
       fa_obj := node_child(inv_obj, "object")
       if fa_obj != nil && fa_obj.Type() == "identifier" {
-        insert_reference({
-          file_id: file_id,
-          name: node_text(fa_obj),
-          context: "call",
-          start_line: start_line(fa_obj),
-          start_col: start_col(fa_obj),
-          end_line: end_line(fa_obj),
-          end_col: end_col(fa_obj),
-        })
+        insert_ref_with_scope(node_text(fa_obj), "call", fa_obj, all_scopes)
       }
     }
   }
@@ -855,15 +904,7 @@ for _, m := range fa_matches {
   }
   fa_field := node_child(fa, "field")
   if fa_field != nil {
-    insert_reference({
-      file_id: file_id,
-      name: node_text(fa_field),
-      context: "field_access",
-      start_line: start_line(fa_field),
-      start_col: start_col(fa_field),
-      end_line: end_line(fa_field),
-      end_col: end_col(fa_field),
-    })
+    insert_ref_with_scope(node_text(fa_field), "field_access", fa_field, all_scopes)
   }
 }
 
@@ -871,15 +912,7 @@ for _, m := range fa_matches {
 new_matches := query("(object_creation_expression type: (type_identifier) @type)", root)
 for _, m := range new_matches {
   tn := m["type"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(tn),
-    context: "call",
-    start_line: start_line(tn),
-    start_col: start_col(tn),
-    end_line: end_line(tn),
-    end_col: end_col(tn),
-  })
+  insert_ref_with_scope(node_text(tn), "call", tn, all_scopes)
 }
 
 // Type references (type_identifier nodes not in declaration name position)
@@ -902,13 +935,5 @@ for _, m := range type_ref_matches {
     }
   }
 
-  insert_reference({
-    file_id: file_id,
-    name: type_name,
-    context: "type_annotation",
-    start_line: start_line(tn),
-    start_col: start_col(tn),
-    end_line: end_line(tn),
-    end_col: end_col(tn),
-  })
+  insert_ref_with_scope(type_name, "type_annotation", tn, all_scopes)
 }

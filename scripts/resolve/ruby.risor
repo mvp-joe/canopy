@@ -128,6 +128,36 @@ for _, f := range rb_files {
   file_sym_by_id[fid_str] = id_map
 }
 
+// --- Build map of function-local variable symbol IDs per file ---
+file_local_sym_ids := {}
+for _, f := range rb_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "variable" {
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym["id"])] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // --- Build require resolution map ---
 // Map from basename (without .rb) -> file_id for require matching.
 file_basename_map := {}
@@ -257,8 +287,13 @@ for _, f := range resolve_files {
       } else {
         req_syms = symbols_by_file(req_fid)
       }
+      req_local_ids := {}
+      if req_fid_str in file_local_sym_ids {
+        req_local_ids = file_local_sym_ids[req_fid_str]
+      }
       for _, sym := range req_syms {
-        if sym["name"] == ref_name {
+        sym_id_str := string(sym["id"])
+        if sym["name"] == ref_name && !(sym_id_str in req_local_ids) {
           insert_resolved_reference({
             reference_id: ref_id,
             target_symbol_id: sym["id"],

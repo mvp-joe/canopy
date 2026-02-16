@@ -74,6 +74,36 @@ for _, f := range c_files {
   file_sym_by_id[fid_str] = id_map
 }
 
+// --- Build map of function-local variable symbol IDs per file ---
+file_local_sym_ids := {}
+for _, f := range c_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "variable" {
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym["id"])] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // Track which references have been resolved (ref_id_str → true)
 resolved_set := {}
 
@@ -197,8 +227,10 @@ for _, f := range resolve_files {
     for _, inc_fid := range included_file_ids {
       inc_fid_str := string(inc_fid)
       inc_syms := file_symbols_map[inc_fid_str]
+      inc_local_ids := file_local_sym_ids[inc_fid_str]
       for _, sym := range inc_syms {
-        if sym["name"] == ref_name {
+        sym_id_str := string(sym["id"])
+        if sym["name"] == ref_name && !(sym_id_str in inc_local_ids) {
           insert_resolved_reference({
             reference_id: ref_id,
             target_symbol_id: sym["id"],
@@ -289,8 +321,10 @@ for _, f := range resolve_files {
       }
       other_fid_str := string(other_fid)
       other_syms := file_symbols_map[other_fid_str]
+      other_local_ids := file_local_sym_ids[other_fid_str]
       for _, sym := range other_syms {
-        if sym["name"] == ref_name {
+        sym_id_str := string(sym["id"])
+        if sym["name"] == ref_name && !(sym_id_str in other_local_ids) {
           insert_resolved_reference({
             reference_id: ref_id,
             target_symbol_id: sym["id"],

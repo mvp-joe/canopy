@@ -1,0 +1,20 @@
+{
+  "definitions": [
+    { "name": "handle_a", "kind": "function", "file": "handlers.py", "line": 0 },
+    { "name": "helper", "kind": "function", "file": "handlers.py", "line": 1 },
+    { "name": "handle_b", "kind": "function", "file": "handlers.py", "line": 5 },
+    { "name": "helper", "kind": "function", "file": "handlers.py", "line": 6 }
+  ],
+  "references": [
+    {
+      "_comment": "helper() in handle_a should resolve to handle_a's helper (line 1)",
+      "from": { "file": "handlers.py", "line": 3, "col": 11 },
+      "to": { "name": "helper", "file": "handlers.py", "line": 1 }
+    },
+    {
+      "_comment": "helper() in handle_b should resolve to handle_b's helper (line 6), NOT handle_a's",
+      "from": { "file": "handlers.py", "line": 8, "col": 11 },
+      "to": { "name": "helper", "file": "handlers.py", "line": 6 }
+    }
+  ]
+}

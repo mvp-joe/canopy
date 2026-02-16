@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "startWorker", "kind": "function", "file": "worker.ts", "line": 0 },
+    { "name": "cfg", "kind": "constant", "file": "worker.ts", "line": 1 },
+    { "name": "loadWorker", "kind": "function", "file": "worker.ts", "line": 5 },
+    { "name": "cfg", "kind": "function", "file": "config.ts", "line": 0 },
+    { "name": "main", "kind": "function", "file": "main.ts", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "cfg() in main should resolve to config.ts cfg (line 0), NOT worker.ts local cfg (line 1)",
+      "from": { "file": "main.ts", "line": 3, "col": 9 },
+      "to": { "name": "cfg", "file": "config.ts", "line": 0 }
+    }
+  ]
+}

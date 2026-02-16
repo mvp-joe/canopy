@@ -1,0 +1,20 @@
+{
+  "definitions": [
+    { "name": "handleA", "kind": "function", "file": "handlers.ts", "line": 0 },
+    { "name": "formatter", "kind": "function", "file": "handlers.ts", "line": 1 },
+    { "name": "handleB", "kind": "function", "file": "handlers.ts", "line": 5 },
+    { "name": "formatter", "kind": "function", "file": "handlers.ts", "line": 6 }
+  ],
+  "references": [
+    {
+      "_comment": "formatter() in handleA should resolve to handleA's formatter (line 1)",
+      "from": { "file": "handlers.ts", "line": 2, "col": 9 },
+      "to": { "name": "formatter", "file": "handlers.ts", "line": 1 }
+    },
+    {
+      "_comment": "formatter() in handleB should resolve to handleB's formatter (line 6), NOT handleA's formatter (line 1)",
+      "from": { "file": "handlers.ts", "line": 7, "col": 9 },
+      "to": { "name": "formatter", "file": "handlers.ts", "line": 6 }
+    }
+  ]
+}

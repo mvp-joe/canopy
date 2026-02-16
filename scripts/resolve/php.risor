@@ -133,6 +133,36 @@ for _, f := range php_files {
   file_sym_by_id[fid_str] = id_map
 }
 
+// --- Build map of function-local variable symbol IDs per file ---
+file_local_sym_ids := {}
+for _, f := range php_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "variable" {
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym["id"])] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // --- Build import alias map per file ---
 // use App\Models\User => alias "User" -> import record
 file_import_alias_map := {}
@@ -280,6 +310,7 @@ for _, f := range resolve_files {
 
 // --- (c) Cross-file name-based resolution (same name, no import needed) ---
 // For still-unresolved references, try matching by name across all PHP files.
+// Skip function-local symbols from other files.
 for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
@@ -297,10 +328,16 @@ for _, f := range resolve_files {
     // Only resolve type_annotation and call contexts cross-file
     if ref_ctx == "type_annotation" || ref_ctx == "call" {
       target_syms := db_query(
-        "SELECT s.id, s.kind FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'php' AND f.id != ? AND s.kind != 'namespace'",
+        "SELECT s.id, s.kind, s.file_id FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'php' AND f.id != ? AND s.kind != 'namespace'",
         ref_name, fid,
       )
       for _, ts := range target_syms {
+        // Skip function-local symbols from other files
+        ts_fid_str := string(ts["file_id"])
+        ts_sid_str := string(ts["id"])
+        if ts_fid_str in file_local_sym_ids && ts_sid_str in file_local_sym_ids[ts_fid_str] {
+          continue
+        }
         insert_resolved_reference({
           reference_id: ref_id,
           target_symbol_id: ts["id"],

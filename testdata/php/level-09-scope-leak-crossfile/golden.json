@@ -1,0 +1,13 @@
+{
+  "definitions": [
+    { "name": "compute", "kind": "function", "file": "helpers.php", "line": 2 },
+    { "name": "main", "kind": "function", "file": "main.php", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "main() calls compute() — must resolve cross-file to helpers.php",
+      "from": { "file": "main.php", "line": 3, "col": 11 },
+      "to": { "name": "compute", "file": "helpers.php", "line": 2 }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "startWorker", "kind": "function", "file": "a_worker.js", "line": 0 },
+    { "name": "format", "kind": "constant", "file": "a_worker.js", "line": 1 },
+    { "name": "format", "kind": "function", "file": "b_format.js", "line": 0 },
+    { "name": "output", "kind": "constant", "file": "c_main.js", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "format() in c_main.js should resolve to the exported function in b_format.js, NOT the local variable in a_worker.js",
+      "from": { "file": "c_main.js", "line": 2, "col": 15 },
+      "to": { "name": "format", "file": "b_format.js", "line": 0 }
+    }
+  ]
+}

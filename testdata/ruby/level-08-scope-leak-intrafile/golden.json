@@ -1,0 +1,36 @@
+{
+  "definitions": [
+    { "name": "Processor", "kind": "class", "file": "handlers.rb", "line": 0 },
+    { "name": "handle_a", "kind": "method", "file": "handlers.rb", "line": 1 },
+    { "name": "handle_b", "kind": "method", "file": "handlers.rb", "line": 5 },
+    { "name": "Formatter", "kind": "class", "file": "handlers.rb", "line": 10 },
+    { "name": "bold", "kind": "method", "file": "handlers.rb", "line": 11 },
+    { "name": "italic", "kind": "method", "file": "handlers.rb", "line": 15 }
+  ],
+  "references": [
+    {
+      "_comment": "Formatter ref in handle_a resolves to Formatter class",
+      "from": { "file": "handlers.rb", "line": 2, "col": 4 },
+      "to": { "name": "Formatter", "file": "handlers.rb", "line": 10 }
+    },
+    {
+      "_comment": "bold() in handle_a resolves to Formatter.bold",
+      "from": { "file": "handlers.rb", "line": 2, "col": 14 },
+      "to": { "name": "bold", "file": "handlers.rb", "line": 11 }
+    },
+    {
+      "_comment": "Formatter ref in handle_b resolves to Formatter class",
+      "from": { "file": "handlers.rb", "line": 6, "col": 4 },
+      "to": { "name": "Formatter", "file": "handlers.rb", "line": 10 }
+    },
+    {
+      "_comment": "italic() in handle_b resolves to Formatter.italic",
+      "from": { "file": "handlers.rb", "line": 6, "col": 14 },
+      "to": { "name": "italic", "file": "handlers.rb", "line": 15 }
+    }
+  ],
+  "calls": [
+    { "caller": "handle_a", "callee": "bold" },
+    { "caller": "handle_b", "callee": "italic" }
+  ]
+}

@@ -125,6 +125,47 @@ for _, f := range py_files {
   file_sym_by_id[fid_str] = id_map
 }
 
+// --- Build map of function-local symbol IDs per file ---
+// A symbol is "local" if it is defined inside a function scope that it does NOT own.
+// This catches nested functions and local variables but not the top-level functions themselves.
+file_local_sym_ids := {}
+for _, f := range py_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "function" || sym["kind"] == "variable" {
+      sym_id := sym["id"]
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        // Skip if this scope belongs to this symbol (the function's own scope)
+        fsc_sym_id := nil
+        if "symbol_id" in fsc {
+          fsc_sym_id = fsc["symbol_id"]
+        }
+        if fsc_sym_id != nil && fsc_sym_id == sym_id {
+          continue
+        }
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym_id)] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // --- Build import resolution map per file ---
 // For each file, build a map: local_name -> import record
 // "from foo import bar" => local_name "bar" -> import {source: "foo", imported_name: "bar"}
@@ -274,6 +315,11 @@ for _, f := range resolve_files {
           target_name, fid,
         )
         for _, ts := range target_syms {
+          ts_fid_str := string(ts["file_id"])
+          ts_id_str := string(ts["id"])
+          if ts_fid_str in file_local_sym_ids && ts_id_str in file_local_sym_ids[ts_fid_str] {
+            continue
+          }
           insert_resolved_reference({
             reference_id: ref_id,
             target_symbol_id: ts["id"],
@@ -316,17 +362,23 @@ for _, f := range resolve_files {
 
       // Search other Python files for public symbols with this name
       target_syms := db_query(
-        "SELECT s.id FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'python' AND f.id != ? AND (s.visibility = 'public' OR s.visibility IS NULL)",
+        "SELECT s.id, s.file_id FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.name = ? AND f.language = 'python' AND f.id != ? AND (s.visibility = 'public' OR s.visibility IS NULL)",
         ref_name, fid,
       )
-      if len(target_syms) > 0 {
+      for _, ts := range target_syms {
+        ts_fid_str := string(ts["file_id"])
+        ts_id_str := string(ts["id"])
+        if ts_fid_str in file_local_sym_ids && ts_id_str in file_local_sym_ids[ts_fid_str] {
+          continue
+        }
         insert_resolved_reference({
           reference_id: ref_id,
-          target_symbol_id: target_syms[0]["id"],
+          target_symbol_id: ts["id"],
           confidence: 0.7,
           resolution_kind: "import",
         })
         resolved_set[ref_id_str] = true
+        break
       }
     }
   }

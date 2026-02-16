@@ -47,6 +47,52 @@ func find_symbol_id(name, symbol_map) {
   return nil
 }
 
+func find_innermost_scope_id(scope_map, line, col) {
+  best_id := nil
+  best_size := -1
+  for _, sc := range scope_map {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if line > sl && line < el {
+      inside = true
+    } else if line == sl && line == el {
+      inside = col >= sc_col && col <= ec
+    } else if line == sl {
+      inside = col >= sc_col
+    } else if line == el {
+      inside = col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best_id == nil || size < best_size {
+        best_id = sc["id"]
+        best_size = size
+      }
+    }
+  }
+  return best_id
+}
+
+func insert_ref_with_scope(name, context, node, scope_map) {
+  ref := {
+    file_id: file_id,
+    name: name,
+    context: context,
+    start_line: start_line(node),
+    start_col: start_col(node),
+    end_line: end_line(node),
+    end_col: end_col(node),
+  }
+  sid := find_innermost_scope_id(scope_map, start_line(node), start_col(node))
+  if sid != nil {
+    ref["scope_id"] = sid
+  }
+  insert_reference(ref)
+}
+
 // extract_declarator_name walks a declarator tree to find the leaf identifier.
 func extract_declarator_name(decl_node) {
   t := decl_node.Type()
@@ -134,7 +180,7 @@ func extract_cpp_params(sym_id, params_node) {
   }
 }
 
-func extract_block_scopes(node, parent_scope_id) {
+func extract_block_scopes(node, parent_scope_id, scope_map) {
   block_types := ["if_statement", "for_statement", "while_statement",
                    "switch_statement", "do_statement", "for_range_loop",
                    "try_statement"]
@@ -161,9 +207,16 @@ func extract_block_scopes(node, parent_scope_id) {
         end_col: end_col(child),
         parent_scope_id: parent_scope_id,
       })
-      extract_block_scopes(child, block_scope_id)
+      scope_map[string(block_scope_id)] = {
+        id: block_scope_id,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
+      extract_block_scopes(child, block_scope_id, scope_map)
     } else {
-      extract_block_scopes(child, parent_scope_id)
+      extract_block_scopes(child, parent_scope_id, scope_map)
     }
   }
 }
@@ -865,6 +918,7 @@ for _, m := range global_decl_matches {
 }
 
 // --- Scope tree ---
+scope_map := {}
 file_scope_id := insert_scope({
   file_id: file_id,
   kind: "file",
@@ -873,6 +927,13 @@ file_scope_id := insert_scope({
   end_line: end_line(root),
   end_col: end_col(root),
 })
+scope_map[string(file_scope_id)] = {
+  id: file_scope_id,
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+}
 
 // Namespace scopes
 ns_scope_matches := query("(namespace_definition) @ns", root)
@@ -883,7 +944,7 @@ for _, m := range ns_scope_matches {
   if ns_nn != nil {
     ns_sym_id = find_symbol_id(node_text(ns_nn), symbol_ids)
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "namespace",
     start_line: start_line(ns_node),
@@ -893,9 +954,16 @@ for _, m := range ns_scope_matches {
     parent_scope_id: file_scope_id,
   }
   if ns_sym_id != nil {
-    scope_map["symbol_id"] = ns_sym_id
+    scope_data["symbol_id"] = ns_sym_id
   }
-  insert_scope(scope_map)
+  ns_scope_id := insert_scope(scope_data)
+  scope_map[string(ns_scope_id)] = {
+    id: ns_scope_id,
+    start_line: start_line(ns_node),
+    start_col: start_col(ns_node),
+    end_line: end_line(ns_node),
+    end_col: end_col(ns_node),
+  }
 }
 
 // Class scopes
@@ -907,7 +975,7 @@ for _, m := range class_scope_matches {
   if cls_nn != nil {
     cls_sym_id = find_symbol_id(node_text(cls_nn), symbol_ids)
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "class",
     start_line: start_line(cls_node),
@@ -917,9 +985,16 @@ for _, m := range class_scope_matches {
     parent_scope_id: file_scope_id,
   }
   if cls_sym_id != nil {
-    scope_map["symbol_id"] = cls_sym_id
+    scope_data["symbol_id"] = cls_sym_id
   }
-  insert_scope(scope_map)
+  cls_scope_id := insert_scope(scope_data)
+  scope_map[string(cls_scope_id)] = {
+    id: cls_scope_id,
+    start_line: start_line(cls_node),
+    start_col: start_col(cls_node),
+    end_line: end_line(cls_node),
+    end_col: end_col(cls_node),
+  }
 }
 
 // Function scopes (top-level)
@@ -945,7 +1020,7 @@ for _, m := range fn_scope_matches {
       fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "function",
     start_line: start_line(fn_node),
@@ -955,12 +1030,19 @@ for _, m := range fn_scope_matches {
     parent_scope_id: file_scope_id,
   }
   if fn_sym_id != nil {
-    scope_map["symbol_id"] = fn_sym_id
+    scope_data["symbol_id"] = fn_sym_id
   }
-  fn_scope_id := insert_scope(scope_map)
+  fn_scope_id := insert_scope(scope_data)
+  scope_map[string(fn_scope_id)] = {
+    id: fn_scope_id,
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+  }
   body_node := node_child(fn_node, "body")
   if body_node != nil {
-    extract_block_scopes(body_node, fn_scope_id)
+    extract_block_scopes(body_node, fn_scope_id, scope_map)
   }
 }
 
@@ -978,7 +1060,7 @@ for _, m := range tmpl_fn_scope_matches {
       fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "function",
     start_line: start_line(tmpl_node),
@@ -988,12 +1070,19 @@ for _, m := range tmpl_fn_scope_matches {
     parent_scope_id: file_scope_id,
   }
   if fn_sym_id != nil {
-    scope_map["symbol_id"] = fn_sym_id
+    scope_data["symbol_id"] = fn_sym_id
   }
-  fn_scope_id := insert_scope(scope_map)
+  fn_scope_id := insert_scope(scope_data)
+  scope_map[string(fn_scope_id)] = {
+    id: fn_scope_id,
+    start_line: start_line(tmpl_node),
+    start_col: start_col(tmpl_node),
+    end_line: end_line(tmpl_node),
+    end_col: end_col(tmpl_node),
+  }
   body_node := node_child(fn_node, "body")
   if body_node != nil {
-    extract_block_scopes(body_node, fn_scope_id)
+    extract_block_scopes(body_node, fn_scope_id, scope_map)
   }
 }
 
@@ -1002,31 +1091,13 @@ for _, m := range tmpl_fn_scope_matches {
 // Simple function calls
 call_matches := query("(call_expression function: (identifier) @name) @call", root)
 for _, m := range call_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "call",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "call", m["name"], scope_map)
 }
 
 // Qualified calls: std::sort(), obj.method(), ptr->method()
 field_call_matches := query("(call_expression function: (field_expression argument: (_) @obj field: (field_identifier) @field))", root)
 for _, m := range field_call_matches {
-  field_node := m["field"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(field_node),
-    context: "call",
-    start_line: start_line(field_node),
-    start_col: start_col(field_node),
-    end_line: end_line(field_node),
-    end_col: end_col(field_node),
-  })
+  insert_ref_with_scope(node_text(m["field"]), "call", m["field"], scope_map)
 }
 
 // Non-call field access
@@ -1037,16 +1108,7 @@ for _, m := range field_matches {
   if parent != nil && parent.Type() == "call_expression" {
     // Already handled above
   } else {
-    field_node := m["field"]
-    insert_reference({
-      file_id: file_id,
-      name: node_text(field_node),
-      context: "field_access",
-      start_line: start_line(field_node),
-      start_col: start_col(field_node),
-      end_line: end_line(field_node),
-      end_col: end_col(field_node),
-    })
+    insert_ref_with_scope(node_text(m["field"]), "field_access", m["field"], scope_map)
   }
 }
 
@@ -1079,14 +1141,6 @@ for _, m := range type_ref_matches {
   }
 
   if !is_decl {
-    insert_reference({
-      file_id: file_id,
-      name: type_name,
-      context: "type_annotation",
-      start_line: start_line(tn),
-      start_col: start_col(tn),
-      end_line: end_line(tn),
-      end_col: end_col(tn),
-    })
+    insert_ref_with_scope(type_name, "type_annotation", tn, scope_map)
   }
 }

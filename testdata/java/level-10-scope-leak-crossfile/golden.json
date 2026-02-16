@@ -1,0 +1,20 @@
+{
+  "definitions": [
+    { "name": "Service", "kind": "class", "file": "Service.java", "line": 2 },
+    { "name": "process", "kind": "method", "file": "Service.java", "line": 3 },
+    { "name": "Helper", "kind": "class", "file": "Helper.java", "line": 2 },
+    { "name": "run", "kind": "method", "file": "Helper.java", "line": 3 }
+  ],
+  "references": [
+    {
+      "_comment": "new Helper() resolves to Helper class cross-file",
+      "from": { "file": "Service.java", "line": 4, "col": 28 },
+      "to": { "name": "Helper", "file": "Helper.java", "line": 2 }
+    },
+    {
+      "_comment": "helper.run() resolves to Helper.run method cross-file",
+      "from": { "file": "Service.java", "line": 5, "col": 15 },
+      "to": { "name": "run", "file": "Helper.java", "line": 3 }
+    }
+  ]
+}

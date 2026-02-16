@@ -48,6 +48,52 @@ func find_symbol_id(name, symbol_map) {
   return nil
 }
 
+func find_innermost_scope_id(scope_map, line, col) {
+  best_id := nil
+  best_size := -1
+  for _, sc := range scope_map {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if line > sl && line < el {
+      inside = true
+    } else if line == sl && line == el {
+      inside = col >= sc_col && col <= ec
+    } else if line == sl {
+      inside = col >= sc_col
+    } else if line == el {
+      inside = col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best_id == nil || size < best_size {
+        best_id = sc["id"]
+        best_size = size
+      }
+    }
+  }
+  return best_id
+}
+
+func insert_ref_with_scope(name, context, node, scope_map) {
+  ref := {
+    file_id: file_id,
+    name: name,
+    context: context,
+    start_line: start_line(node),
+    start_col: start_col(node),
+    end_line: end_line(node),
+    end_col: end_col(node),
+  }
+  sid := find_innermost_scope_id(scope_map, start_line(node), start_col(node))
+  if sid != nil {
+    ref["scope_id"] = sid
+  }
+  insert_reference(ref)
+}
+
 // Extract method parameters from a method_parameters node.
 func extract_params(sym_id, params_node) {
   count := int(params_node.NamedChildCount())
@@ -115,7 +161,7 @@ func extract_params(sym_id, params_node) {
 // Track current visibility state for methods within a class/module body.
 // Ruby uses "private" / "protected" / "public" as method calls that change
 // the default visibility for subsequent methods.
-func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
+func extract_class_body(parent_sym_id, body_node, parent_scope_id, scope_map) {
   current_visibility := "public"
   count := int(body_node.NamedChildCount())
   for i := 0; i < count; i++ {
@@ -159,7 +205,7 @@ func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
       }
 
       // Method scope
-      meth_scope_map := {
+      meth_scope_data := {
         file_id: file_id,
         kind: "function",
         start_line: start_line(child),
@@ -169,7 +215,14 @@ func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
         parent_scope_id: parent_scope_id,
         symbol_id: sym_id,
       }
-      insert_scope(meth_scope_map)
+      meth_scope_id := insert_scope(meth_scope_data)
+      scope_map[string(meth_scope_id)] = {
+        id: meth_scope_id,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
     }
 
     if ct == "singleton_method" {
@@ -207,7 +260,7 @@ func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
         extract_params(sym_id, mp)
       }
 
-      meth_scope_map := {
+      meth_scope_data := {
         file_id: file_id,
         kind: "function",
         start_line: start_line(child),
@@ -217,7 +270,14 @@ func extract_class_body(parent_sym_id, body_node, parent_scope_id) {
         parent_scope_id: parent_scope_id,
         symbol_id: sym_id,
       }
-      insert_scope(meth_scope_map)
+      meth_scope_id := insert_scope(meth_scope_data)
+      scope_map[string(meth_scope_id)] = {
+        id: meth_scope_id,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
     }
 
     // include/extend/prepend as type_members
@@ -393,6 +453,7 @@ for i := 0; i < root_count; i++ {
 }
 
 // --- Scope tree ---
+scope_map := {}
 file_scope_id := insert_scope({
   file_id: file_id,
   kind: "file",
@@ -401,6 +462,13 @@ file_scope_id := insert_scope({
   end_line: end_line(root),
   end_col: end_col(root),
 })
+scope_map[string(file_scope_id)] = {
+  id: file_scope_id,
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+}
 
 // Module scopes and their body extraction
 for _, m := range mod_matches {
@@ -408,7 +476,7 @@ for _, m := range mod_matches {
   mod_name := node_text(m["name"])
   mod_sym_id := find_symbol_id(mod_name, symbol_ids)
 
-  mod_scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "module",
     start_line: start_line(mod_node),
@@ -418,14 +486,21 @@ for _, m := range mod_matches {
     parent_scope_id: file_scope_id,
   }
   if mod_sym_id != nil {
-    mod_scope_map["symbol_id"] = mod_sym_id
+    scope_data["symbol_id"] = mod_sym_id
   }
-  mod_scope_id := insert_scope(mod_scope_map)
+  mod_scope_id := insert_scope(scope_data)
+  scope_map[string(mod_scope_id)] = {
+    id: mod_scope_id,
+    start_line: start_line(mod_node),
+    start_col: start_col(mod_node),
+    end_line: end_line(mod_node),
+    end_col: end_col(mod_node),
+  }
 
   // Extract body contents (methods, etc.)
   body_node := node_child(mod_node, "body")
   if body_node != nil {
-    extract_class_body(mod_sym_id, body_node, mod_scope_id)
+    extract_class_body(mod_sym_id, body_node, mod_scope_id, scope_map)
   }
 }
 
@@ -435,7 +510,7 @@ for _, m := range class_matches {
   class_name := node_text(m["name"])
   class_sym_id := find_symbol_id(class_name, symbol_ids)
 
-  class_scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "class",
     start_line: start_line(class_node),
@@ -445,14 +520,21 @@ for _, m := range class_matches {
     parent_scope_id: file_scope_id,
   }
   if class_sym_id != nil {
-    class_scope_map["symbol_id"] = class_sym_id
+    scope_data["symbol_id"] = class_sym_id
   }
-  class_scope_id := insert_scope(class_scope_map)
+  class_scope_id := insert_scope(scope_data)
+  scope_map[string(class_scope_id)] = {
+    id: class_scope_id,
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+  }
 
   // Extract body contents
   body_node := node_child(class_node, "body")
   if body_node != nil {
-    extract_class_body(class_sym_id, body_node, class_scope_id)
+    extract_class_body(class_sym_id, body_node, class_scope_id, scope_map)
   }
 
   // Superclass reference
@@ -463,15 +545,7 @@ for _, m := range class_matches {
     for j := 0; j < super_count; j++ {
       sc := super_node.NamedChild(j)
       if sc.Type() == "constant" {
-        insert_reference({
-          file_id: file_id,
-          name: node_text(sc),
-          context: "type_annotation",
-          start_line: start_line(sc),
-          start_col: start_col(sc),
-          end_line: end_line(sc),
-          end_col: end_col(sc),
-        })
+        insert_ref_with_scope(node_text(sc), "type_annotation", sc, scope_map)
       }
     }
   }
@@ -486,7 +560,7 @@ for i := 0; i < root_count; i++ {
     if nn != nil {
       fn_sym_id = find_symbol_id(node_text(nn), symbol_ids)
     }
-    scope_map := {
+    scope_data := {
       file_id: file_id,
       kind: "function",
       start_line: start_line(child),
@@ -496,9 +570,16 @@ for i := 0; i < root_count; i++ {
       parent_scope_id: file_scope_id,
     }
     if fn_sym_id != nil {
-      scope_map["symbol_id"] = fn_sym_id
+      scope_data["symbol_id"] = fn_sym_id
     }
-    insert_scope(scope_map)
+    fn_scope_id := insert_scope(scope_data)
+    scope_map[string(fn_scope_id)] = {
+      id: fn_scope_id,
+      start_line: start_line(child),
+      start_col: start_col(child),
+      end_line: end_line(child),
+      end_col: end_col(child),
+    }
   }
 }
 
@@ -527,28 +608,12 @@ for _, m := range call_matches {
   }
 
   if method_name_node.Type() == "identifier" {
-    insert_reference({
-      file_id: file_id,
-      name: node_text(method_name_node),
-      context: "call",
-      start_line: start_line(method_name_node),
-      start_col: start_col(method_name_node),
-      end_line: end_line(method_name_node),
-      end_col: end_col(method_name_node),
-    })
+    insert_ref_with_scope(node_text(method_name_node), "call", method_name_node, scope_map)
   }
 
   // If the receiver is a constant (ClassName.method), also reference it
   if receiver.Type() == "constant" {
-    insert_reference({
-      file_id: file_id,
-      name: node_text(receiver),
-      context: "type_annotation",
-      start_line: start_line(receiver),
-      start_col: start_col(receiver),
-      end_line: end_line(receiver),
-      end_col: end_col(receiver),
-    })
+    insert_ref_with_scope(node_text(receiver), "type_annotation", receiver, scope_map)
   }
 }
 
@@ -595,13 +660,5 @@ for _, m := range const_ref_matches {
     }
   }
 
-  insert_reference({
-    file_id: file_id,
-    name: const_name,
-    context: "type_annotation",
-    start_line: start_line(const_node),
-    start_col: start_col(const_node),
-    end_line: end_line(const_node),
-    end_col: end_col(const_node),
-  })
+  insert_ref_with_scope(const_name, "type_annotation", const_node, scope_map)
 }

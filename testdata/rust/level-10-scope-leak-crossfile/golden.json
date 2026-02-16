@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "Worker", "kind": "struct", "file": "a_worker.rs", "line": 0 },
+    { "name": "new", "kind": "function", "file": "a_worker.rs", "line": 5 },
+    { "name": "process", "kind": "method", "file": "a_worker.rs", "line": 9 },
+    { "name": "process", "kind": "function", "file": "b_config.rs", "line": 0 },
+    { "name": "run", "kind": "function", "file": "b_config.rs", "line": 4 }
+  ],
+  "references": [
+    {
+      "_comment": "process() in run() should resolve to the same-file function process (line 0), NOT Worker::process method",
+      "from": { "file": "b_config.rs", "line": 5, "col": 4 },
+      "to": { "name": "process", "file": "b_config.rs", "line": 0 }
+    }
+  ]
+}

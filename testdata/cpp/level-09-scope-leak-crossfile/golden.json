@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "doWork", "kind": "function", "file": "a_worker.cpp", "line": 0 },
+    { "name": "helper", "kind": "variable", "file": "a_worker.cpp", "line": 1 },
+    { "name": "helper", "kind": "function", "file": "b_helper.cpp", "line": 0 },
+    { "name": "main", "kind": "function", "file": "c_main.cpp", "line": 0 },
+    { "name": "x", "kind": "variable", "file": "c_main.cpp", "line": 1 }
+  ],
+  "references": [
+    {
+      "_comment": "helper() in main should resolve to the function helper in b_helper.cpp, NOT the local variable helper in a_worker.cpp",
+      "from": { "file": "c_main.cpp", "line": 1, "col": 12 },
+      "to": { "name": "helper", "file": "b_helper.cpp", "line": 0 }
+    }
+  ]
+}

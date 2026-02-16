@@ -47,6 +47,52 @@ func find_symbol_id(name, symbol_map) {
   return nil
 }
 
+func find_innermost_scope_id(scope_map, line, col) {
+  best_id := nil
+  best_size := -1
+  for _, sc := range scope_map {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if line > sl && line < el {
+      inside = true
+    } else if line == sl && line == el {
+      inside = col >= sc_col && col <= ec
+    } else if line == sl {
+      inside = col >= sc_col
+    } else if line == el {
+      inside = col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best_id == nil || size < best_size {
+        best_id = sc["id"]
+        best_size = size
+      }
+    }
+  }
+  return best_id
+}
+
+func insert_ref_with_scope(name, context, node, scope_map) {
+  ref := {
+    file_id: file_id,
+    name: name,
+    context: context,
+    start_line: start_line(node),
+    start_col: start_col(node),
+    end_line: end_line(node),
+    end_col: end_col(node),
+  }
+  sid := find_innermost_scope_id(scope_map, start_line(node), start_col(node))
+  if sid != nil {
+    ref["scope_id"] = sid
+  }
+  insert_reference(ref)
+}
+
 // extract_declarator_name walks a declarator tree to find the leaf identifier.
 // C declarators can be wrapped in pointer_declarator, parenthesized_declarator, etc.
 func extract_declarator_name(decl_node) {
@@ -133,7 +179,7 @@ func extract_c_params(sym_id, params_node) {
   }
 }
 
-func extract_block_scopes(node, parent_scope_id) {
+func extract_block_scopes(node, parent_scope_id, scope_map) {
   block_types := ["if_statement", "for_statement", "while_statement",
                    "switch_statement", "do_statement"]
   count := int(node.NamedChildCount())
@@ -159,9 +205,16 @@ func extract_block_scopes(node, parent_scope_id) {
         end_col: end_col(child),
         parent_scope_id: parent_scope_id,
       })
-      extract_block_scopes(child, block_scope_id)
+      scope_map[string(block_scope_id)] = {
+        id: block_scope_id,
+        start_line: start_line(child),
+        start_col: start_col(child),
+        end_line: end_line(child),
+        end_col: end_col(child),
+      }
+      extract_block_scopes(child, block_scope_id, scope_map)
     } else {
-      extract_block_scopes(child, parent_scope_id)
+      extract_block_scopes(child, parent_scope_id, scope_map)
     }
   }
 }
@@ -527,6 +580,7 @@ for _, m := range init_ptr_matches {
 }
 
 // --- Scope tree ---
+scope_map := {}
 file_scope_id := insert_scope({
   file_id: file_id,
   kind: "file",
@@ -535,6 +589,13 @@ file_scope_id := insert_scope({
   end_line: end_line(root),
   end_col: end_col(root),
 })
+scope_map[string(file_scope_id)] = {
+  id: file_scope_id,
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+}
 
 // Function scopes
 fn_scope_matches := query("(function_definition) @fn", root)
@@ -548,7 +609,7 @@ for _, m := range fn_scope_matches {
       fn_sym_id = find_symbol_id(extract_declarator_name(nn), symbol_ids)
     }
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "function",
     start_line: start_line(fn_node),
@@ -558,12 +619,19 @@ for _, m := range fn_scope_matches {
     parent_scope_id: file_scope_id,
   }
   if fn_sym_id != nil {
-    scope_map["symbol_id"] = fn_sym_id
+    scope_data["symbol_id"] = fn_sym_id
   }
-  fn_scope_id := insert_scope(scope_map)
+  fn_scope_id := insert_scope(scope_data)
+  scope_map[string(fn_scope_id)] = {
+    id: fn_scope_id,
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+  }
   body_node := node_child(fn_node, "body")
   if body_node != nil {
-    extract_block_scopes(body_node, fn_scope_id)
+    extract_block_scopes(body_node, fn_scope_id, scope_map)
   }
 }
 
@@ -572,32 +640,14 @@ for _, m := range fn_scope_matches {
 // Simple function calls: bar()
 call_matches := query("(call_expression function: (identifier) @name) @call", root)
 for _, m := range call_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "call",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "call", m["name"], scope_map)
 }
 
 // Field access via -> or . (field_expression)
 // Method-like calls: ptr->method(1, 2) — the field_expression is inside call_expression
 field_call_matches := query("(call_expression function: (field_expression argument: (_) @obj field: (field_identifier) @field))", root)
 for _, m := range field_call_matches {
-  field_node := m["field"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(field_node),
-    context: "call",
-    start_line: start_line(field_node),
-    start_col: start_col(field_node),
-    end_line: end_line(field_node),
-    end_col: end_col(field_node),
-  })
+  insert_ref_with_scope(node_text(m["field"]), "call", m["field"], scope_map)
 }
 
 // Non-call field access: obj->field, obj.field
@@ -608,16 +658,7 @@ for _, m := range field_matches {
   if parent != nil && parent.Type() == "call_expression" {
     // Already handled above as a call
   } else {
-    field_node := m["field"]
-    insert_reference({
-      file_id: file_id,
-      name: node_text(field_node),
-      context: "field_access",
-      start_line: start_line(field_node),
-      start_col: start_col(field_node),
-      end_line: end_line(field_node),
-      end_col: end_col(field_node),
-    })
+    insert_ref_with_scope(node_text(m["field"]), "field_access", m["field"], scope_map)
   }
 }
 
@@ -647,14 +688,52 @@ for _, m := range type_ref_matches {
   }
 
   if !is_decl {
-    insert_reference({
-      file_id: file_id,
-      name: type_name,
-      context: "type_annotation",
-      start_line: start_line(tn),
-      start_col: start_col(tn),
-      end_line: end_line(tn),
-      end_col: end_col(tn),
-    })
+    insert_ref_with_scope(type_name, "type_annotation", tn, scope_map)
+  }
+}
+
+// Identifier references in expression context (e.g., return x; or x + 1)
+// Skip identifiers that are declarations, function names in calls, enumerator names, etc.
+id_ref_matches := query("(identifier) @id", root)
+for _, m := range id_ref_matches {
+  id_node := m["id"]
+  id_name := node_text(id_node)
+  parent := id_node.Parent()
+  if parent == nil {
+    continue
+  }
+  pt := parent.Type()
+  // Skip declaration-position identifiers
+  if pt == "function_declarator" || pt == "init_declarator" || pt == "parameter_declaration" {
+    continue
+  }
+  if pt == "declaration" {
+    continue
+  }
+  if pt == "preproc_def" || pt == "preproc_function_def" || pt == "preproc_params" {
+    continue
+  }
+  if pt == "enumerator" {
+    continue
+  }
+  // Skip call-expression function position (already captured as "call" above)
+  if pt == "call_expression" {
+    fn_child := node_child(parent, "function")
+    if fn_child != nil && node_text(fn_child) == id_name {
+      continue
+    }
+  }
+  // Skip pointer_declarator (declaration position)
+  if pt == "pointer_declarator" {
+    continue
+  }
+  // Skip identifiers that are argument lists of call expressions (already handled)
+  // Only emit for expression-context identifiers
+  if pt == "return_statement" || pt == "binary_expression" || pt == "assignment_expression" ||
+     pt == "unary_expression" || pt == "parenthesized_expression" || pt == "argument_list" ||
+     pt == "subscript_expression" || pt == "conditional_expression" || pt == "comma_expression" ||
+     pt == "field_expression" || pt == "cast_expression" || pt == "sizeof_expression" ||
+     pt == "expression_statement" || pt == "initializer_list" {
+    insert_ref_with_scope(id_name, "read", id_node, scope_map)
   }
 }

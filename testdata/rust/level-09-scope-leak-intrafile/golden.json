@@ -1,0 +1,30 @@
+{
+  "definitions": [
+    { "name": "Response", "kind": "struct", "file": "handlers.rs", "line": 0 },
+    { "name": "new", "kind": "function", "file": "handlers.rs", "line": 5 },
+    { "name": "handle_a", "kind": "function", "file": "handlers.rs", "line": 10 },
+    { "name": "handle_b", "kind": "function", "file": "handlers.rs", "line": 14 }
+  ],
+  "references": [
+    {
+      "_comment": "Response::new() in handle_a resolves to new (line 5)",
+      "from": { "file": "handlers.rs", "line": 11, "col": 14 },
+      "to": { "name": "new", "file": "handlers.rs", "line": 5 }
+    },
+    {
+      "_comment": "Response::new() in handle_b resolves to new (line 5)",
+      "from": { "file": "handlers.rs", "line": 15, "col": 14 },
+      "to": { "name": "new", "file": "handlers.rs", "line": 5 }
+    },
+    {
+      "_comment": "Response type in handle_a return type resolves to struct (line 0)",
+      "from": { "file": "handlers.rs", "line": 10, "col": 17 },
+      "to": { "name": "Response", "file": "handlers.rs", "line": 0 }
+    },
+    {
+      "_comment": "Response type in handle_b return type resolves to struct (line 0)",
+      "from": { "file": "handlers.rs", "line": 14, "col": 17 },
+      "to": { "name": "Response", "file": "handlers.rs", "line": 0 }
+    }
+  ]
+}

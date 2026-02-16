@@ -1,0 +1,19 @@
+{
+  "definitions": [
+    { "name": "process", "kind": "function", "file": "handlers.cpp", "line": 0 },
+    { "name": "handleA", "kind": "function", "file": "handlers.cpp", "line": 2 },
+    { "name": "handleB", "kind": "function", "file": "handlers.cpp", "line": 6 }
+  ],
+  "references": [
+    {
+      "_comment": "process(10) in handleA should resolve to the top-level process function",
+      "from": { "file": "handlers.cpp", "line": 3, "col": 4 },
+      "to": { "name": "process", "file": "handlers.cpp", "line": 0 }
+    },
+    {
+      "_comment": "process(20) in handleB should resolve to the top-level process function",
+      "from": { "file": "handlers.cpp", "line": 7, "col": 4 },
+      "to": { "name": "process", "file": "handlers.cpp", "line": 0 }
+    }
+  ]
+}

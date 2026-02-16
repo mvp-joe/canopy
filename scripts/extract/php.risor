@@ -47,6 +47,52 @@ func find_symbol_id(name, symbol_map) {
   return nil
 }
 
+func find_innermost_scope_id(scope_map, line, col) {
+  best_id := nil
+  best_size := -1
+  for _, sc := range scope_map {
+    sl := sc["start_line"]
+    sc_col := sc["start_col"]
+    el := sc["end_line"]
+    ec := sc["end_col"]
+    inside := false
+    if line > sl && line < el {
+      inside = true
+    } else if line == sl && line == el {
+      inside = col >= sc_col && col <= ec
+    } else if line == sl {
+      inside = col >= sc_col
+    } else if line == el {
+      inside = col <= ec
+    }
+    if inside {
+      size := (el - sl) * 10000 + (ec - sc_col)
+      if best_id == nil || size < best_size {
+        best_id = sc["id"]
+        best_size = size
+      }
+    }
+  }
+  return best_id
+}
+
+func insert_ref_with_scope(name, context, node, scope_map) {
+  ref := {
+    file_id: file_id,
+    name: name,
+    context: context,
+    start_line: start_line(node),
+    start_col: start_col(node),
+    end_line: end_line(node),
+    end_col: end_col(node),
+  }
+  sid := find_innermost_scope_id(scope_map, start_line(node), start_col(node))
+  if sid != nil {
+    ref["scope_id"] = sid
+  }
+  insert_reference(ref)
+}
+
 // PHP visibility: everything is public unless explicitly marked otherwise.
 func extract_visibility(node) {
   count := int(node.NamedChildCount())
@@ -479,6 +525,7 @@ for _, m := range func_matches {
 }
 
 // --- Scope tree ---
+scope_map := {}
 file_scope_id := insert_scope({
   file_id: file_id,
   kind: "file",
@@ -487,13 +534,20 @@ file_scope_id := insert_scope({
   end_line: end_line(root),
   end_col: end_col(root),
 })
+scope_map[string(file_scope_id)] = {
+  id: file_scope_id,
+  start_line: start_line(root),
+  start_col: start_col(root),
+  end_line: end_line(root),
+  end_col: end_col(root),
+}
 
 // Namespace scope
 for _, m := range ns_matches {
   ns_node := m["ns"]
   ns_name_node := m["name"]
   ns_sym_id := find_symbol_id(node_text(ns_name_node), symbol_ids)
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "namespace",
     start_line: start_line(ns_node),
@@ -503,9 +557,16 @@ for _, m := range ns_matches {
     parent_scope_id: file_scope_id,
   }
   if ns_sym_id != nil {
-    scope_map["symbol_id"] = ns_sym_id
+    scope_data["symbol_id"] = ns_sym_id
   }
-  insert_scope(scope_map)
+  ns_scope_id := insert_scope(scope_data)
+  scope_map[string(ns_scope_id)] = {
+    id: ns_scope_id,
+    start_line: start_line(ns_node),
+    start_col: start_col(ns_node),
+    end_line: end_line(ns_node),
+    end_col: end_col(ns_node),
+  }
 }
 
 // Class scopes
@@ -513,7 +574,7 @@ for _, m := range class_matches {
   class_node := m["class"]
   c_name := node_text(m["name"])
   c_sym_id := find_symbol_id(c_name, symbol_ids)
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "class",
     start_line: start_line(class_node),
@@ -523,9 +584,16 @@ for _, m := range class_matches {
     parent_scope_id: file_scope_id,
   }
   if c_sym_id != nil {
-    scope_map["symbol_id"] = c_sym_id
+    scope_data["symbol_id"] = c_sym_id
   }
-  class_scope_id := insert_scope(scope_map)
+  class_scope_id := insert_scope(scope_data)
+  scope_map[string(class_scope_id)] = {
+    id: class_scope_id,
+    start_line: start_line(class_node),
+    start_col: start_col(class_node),
+    end_line: end_line(class_node),
+    end_col: end_col(class_node),
+  }
 
   // Method scopes within the class
   body_node := m["body"]
@@ -537,7 +605,7 @@ for _, m := range class_matches {
     if meth_nn != nil {
       meth_sym_id = find_symbol_id(node_text(meth_nn), symbol_ids)
     }
-    meth_scope_map := {
+    meth_scope_data := {
       file_id: file_id,
       kind: "function",
       start_line: start_line(meth_node),
@@ -547,9 +615,16 @@ for _, m := range class_matches {
       parent_scope_id: class_scope_id,
     }
     if meth_sym_id != nil {
-      meth_scope_map["symbol_id"] = meth_sym_id
+      meth_scope_data["symbol_id"] = meth_sym_id
     }
-    insert_scope(meth_scope_map)
+    meth_scope_id := insert_scope(meth_scope_data)
+    scope_map[string(meth_scope_id)] = {
+      id: meth_scope_id,
+      start_line: start_line(meth_node),
+      start_col: start_col(meth_node),
+      end_line: end_line(meth_node),
+      end_col: end_col(meth_node),
+    }
   }
 }
 
@@ -558,7 +633,7 @@ for _, m := range trait_matches {
   trait_node := m["trait"]
   t_name := node_text(m["name"])
   t_sym_id := find_symbol_id(t_name, symbol_ids)
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "class",
     start_line: start_line(trait_node),
@@ -568,9 +643,16 @@ for _, m := range trait_matches {
     parent_scope_id: file_scope_id,
   }
   if t_sym_id != nil {
-    scope_map["symbol_id"] = t_sym_id
+    scope_data["symbol_id"] = t_sym_id
   }
-  insert_scope(scope_map)
+  trait_scope_id := insert_scope(scope_data)
+  scope_map[string(trait_scope_id)] = {
+    id: trait_scope_id,
+    start_line: start_line(trait_node),
+    start_col: start_col(trait_node),
+    end_line: end_line(trait_node),
+    end_col: end_col(trait_node),
+  }
 }
 
 // Interface scopes
@@ -578,7 +660,7 @@ for _, m := range iface_matches {
   iface_node := m["iface"]
   i_name := node_text(m["name"])
   i_sym_id := find_symbol_id(i_name, symbol_ids)
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "class",
     start_line: start_line(iface_node),
@@ -588,9 +670,16 @@ for _, m := range iface_matches {
     parent_scope_id: file_scope_id,
   }
   if i_sym_id != nil {
-    scope_map["symbol_id"] = i_sym_id
+    scope_data["symbol_id"] = i_sym_id
   }
-  insert_scope(scope_map)
+  iface_scope_id := insert_scope(scope_data)
+  scope_map[string(iface_scope_id)] = {
+    id: iface_scope_id,
+    start_line: start_line(iface_node),
+    start_col: start_col(iface_node),
+    end_line: end_line(iface_node),
+    end_col: end_col(iface_node),
+  }
 }
 
 // Top-level function scopes
@@ -601,7 +690,7 @@ for _, m := range func_matches {
   if fn_nn != nil {
     fn_sym_id = find_symbol_id(node_text(fn_nn), symbol_ids)
   }
-  scope_map := {
+  scope_data := {
     file_id: file_id,
     kind: "function",
     start_line: start_line(fn_node),
@@ -611,9 +700,16 @@ for _, m := range func_matches {
     parent_scope_id: file_scope_id,
   }
   if fn_sym_id != nil {
-    scope_map["symbol_id"] = fn_sym_id
+    scope_data["symbol_id"] = fn_sym_id
   }
-  insert_scope(scope_map)
+  fn_scope_id := insert_scope(scope_data)
+  scope_map[string(fn_scope_id)] = {
+    id: fn_scope_id,
+    start_line: start_line(fn_node),
+    start_col: start_col(fn_node),
+    end_line: end_line(fn_node),
+    end_col: end_col(fn_node),
+  }
 }
 
 // --- References ---
@@ -621,58 +717,22 @@ for _, m := range func_matches {
 // Function calls: helper(42)
 fcall_matches := query("(function_call_expression function: (name) @name) @call", root)
 for _, m := range fcall_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "call",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "call", m["name"], scope_map)
 }
 
 // Method calls: $obj->method()
 mcall_matches := query("(member_call_expression name: (name) @name) @call", root)
 for _, m := range mcall_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "call",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "call", m["name"], scope_map)
 }
 
 // Static calls: Class::method()
 scall_matches := query("(scoped_call_expression scope: (name) @scope name: (name) @name) @call", root)
 for _, m := range scall_matches {
-  scope_node := m["scope"]
-  name_node := m["name"]
   // Insert reference for the class
-  insert_reference({
-    file_id: file_id,
-    name: node_text(scope_node),
-    context: "type_annotation",
-    start_line: start_line(scope_node),
-    start_col: start_col(scope_node),
-    end_line: end_line(scope_node),
-    end_col: end_col(scope_node),
-  })
+  insert_ref_with_scope(node_text(m["scope"]), "type_annotation", m["scope"], scope_map)
   // Insert reference for the method
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "call",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "call", m["name"], scope_map)
 }
 
 // Object creation: new ClassName()
@@ -682,44 +742,18 @@ for _, m := range new_matches {
   text := node_text(name_node)
   // Skip "static" and "self" keywords
   if text != "static" && text != "self" && text != "parent" {
-    insert_reference({
-      file_id: file_id,
-      name: text,
-      context: "type_annotation",
-      start_line: start_line(name_node),
-      start_col: start_col(name_node),
-      end_line: end_line(name_node),
-      end_col: end_col(name_node),
-    })
+    insert_ref_with_scope(text, "type_annotation", name_node, scope_map)
   }
 }
 
 // Type annotations in class_interface_clause: implements X
 impl_matches := query("(class_interface_clause (name) @name)", root)
 for _, m := range impl_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "type_annotation",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "type_annotation", m["name"], scope_map)
 }
 
 // Base class references in class_declaration
 base_matches := query("(class_declaration (base_clause (name) @name))", root)
 for _, m := range base_matches {
-  name_node := m["name"]
-  insert_reference({
-    file_id: file_id,
-    name: node_text(name_node),
-    context: "type_annotation",
-    start_line: start_line(name_node),
-    start_col: start_col(name_node),
-    end_line: end_line(name_node),
-    end_col: end_col(name_node),
-  })
+  insert_ref_with_scope(node_text(m["name"]), "type_annotation", m["name"], scope_map)
 }

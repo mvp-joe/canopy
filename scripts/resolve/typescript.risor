@@ -77,6 +77,36 @@ for _, f := range ts_files {
   }
 }
 
+// --- Build map of function-local variable symbol IDs per file ---
+file_local_sym_ids := {}
+for _, f := range ts_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "variable" || sym["kind"] == "constant" {
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym["id"])] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // --- Build import alias → source mapping per file ---
 file_import_alias_map := {}
 for _, f := range ts_files {
@@ -266,8 +296,14 @@ for _, f := range resolve_files {
           resolved_set[ref_id_str] = true
         } else {
           // Named import: find the symbol by its imported name in the target file
+          // Skip function-local symbols (they shouldn't be importable)
+          target_local_ids := {}
+          if target_fid_str in file_local_sym_ids {
+            target_local_ids = file_local_sym_ids[target_fid_str]
+          }
           for _, sym := range target_syms {
-            if sym["name"] == imported_name {
+            sym_id_str := string(sym["id"])
+            if sym["name"] == imported_name && !(sym_id_str in target_local_ids) {
               insert_resolved_reference({
                 reference_id: ref_id,
                 target_symbol_id: sym["id"],
@@ -311,8 +347,13 @@ for _, f := range resolve_files {
             }
             target_fid_str := string(target_fid)
             target_syms := file_symbols_map[target_fid_str]
+            target_local_ids := {}
+            if target_fid_str in file_local_sym_ids {
+              target_local_ids = file_local_sym_ids[target_fid_str]
+            }
             for _, sym := range target_syms {
-              if sym["name"] == ref_name && sym["visibility"] == "public" {
+              sym_id_str := string(sym["id"])
+              if sym["name"] == ref_name && sym["visibility"] == "public" && !(sym_id_str in target_local_ids) {
                 insert_resolved_reference({
                   reference_id: ref_id,
                   target_symbol_id: sym["id"],
@@ -361,8 +402,13 @@ for _, f := range resolve_files {
         other_fid := other_f["id"]
         other_fid_str := string(other_fid)
         other_syms := file_symbols_map[other_fid_str]
+        other_local_ids := {}
+        if other_fid_str in file_local_sym_ids {
+          other_local_ids = file_local_sym_ids[other_fid_str]
+        }
         for _, sym := range other_syms {
-          if sym["name"] == ref_name && sym["kind"] == "method" {
+          sym_id_str := string(sym["id"])
+          if sym["name"] == ref_name && sym["kind"] == "method" && !(sym_id_str in other_local_ids) {
             insert_resolved_reference({
               reference_id: ref_id,
               target_symbol_id: sym["id"],

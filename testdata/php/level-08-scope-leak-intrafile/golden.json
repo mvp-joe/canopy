@@ -1,0 +1,19 @@
+{
+  "definitions": [
+    { "name": "compute", "kind": "function", "file": "scope.php", "line": 2 },
+    { "name": "first", "kind": "function", "file": "scope.php", "line": 6 },
+    { "name": "second", "kind": "function", "file": "scope.php", "line": 10 }
+  ],
+  "references": [
+    {
+      "_comment": "first() calls compute() — must resolve to compute on line 2",
+      "from": { "file": "scope.php", "line": 7, "col": 11 },
+      "to": { "name": "compute", "file": "scope.php", "line": 2 }
+    },
+    {
+      "_comment": "second() calls compute() — must resolve to compute on line 2",
+      "from": { "file": "scope.php", "line": 11, "col": 11 },
+      "to": { "name": "compute", "file": "scope.php", "line": 2 }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "start_worker", "kind": "function", "file": "worker.py", "line": 0 },
+    { "name": "cfg", "kind": "function", "file": "worker.py", "line": 1 },
+    { "name": "cfg", "kind": "function", "file": "config.py", "line": 0 },
+    { "name": "main", "kind": "function", "file": "main.py", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "cfg() in main should resolve to config.py's cfg (line 0), NOT worker.py's nested cfg",
+      "from": { "file": "main.py", "line": 3, "col": 11 },
+      "to": { "name": "cfg", "file": "config.py", "line": 0 }
+    }
+  ]
+}

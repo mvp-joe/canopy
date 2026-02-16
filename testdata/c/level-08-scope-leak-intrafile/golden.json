@@ -1,0 +1,21 @@
+{
+  "definitions": [
+    { "name": "x", "kind": "variable", "file": "main.c", "line": 0 },
+    { "name": "foo", "kind": "function", "file": "main.c", "line": 2 },
+    { "name": "x", "kind": "variable", "file": "main.c", "line": 3 },
+    { "name": "bar", "kind": "function", "file": "main.c", "line": 7 },
+    { "name": "x", "kind": "variable", "file": "main.c", "line": 8 }
+  ],
+  "references": [
+    {
+      "_comment": "x in foo() must resolve to foo's local x, not global or bar's x",
+      "from": { "file": "main.c", "line": 4, "col": 11 },
+      "to": { "name": "x", "file": "main.c", "line": 3 }
+    },
+    {
+      "_comment": "x in bar() must resolve to bar's local x, not global or foo's x",
+      "from": { "file": "main.c", "line": 9, "col": 11 },
+      "to": { "name": "x", "file": "main.c", "line": 8 }
+    }
+  ]
+}
