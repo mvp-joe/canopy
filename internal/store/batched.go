@@ -130,7 +130,19 @@ func (b *BatchedStore) SymbolsByName(name string) ([]*Symbol, error) {
 	return b.store.SymbolsByName(name)
 }
 
-// SymbolsByFile passes through to the underlying Store for cross-file lookups.
+// SymbolsByFile returns symbols for a file, merging any buffered (not yet
+// committed) symbols with those already in the database.
 func (b *BatchedStore) SymbolsByFile(fileID int64) ([]*Symbol, error) {
-	return b.store.SymbolsByFile(fileID)
+	dbSyms, err := b.store.SymbolsByFile(fileID)
+	if err != nil {
+		return nil, err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i := range b.Symbols {
+		if b.Symbols[i].FileID != nil && *b.Symbols[i].FileID == fileID {
+			dbSyms = append(dbSyms, &b.Symbols[i])
+		}
+	}
+	return dbSyms, nil
 }
