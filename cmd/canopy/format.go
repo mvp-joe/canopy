@@ -19,10 +19,26 @@ func formatLocationsText(w io.Writer, locs []CLILocation) {
 // formatSymbolsText formats CLISymbol results as aligned columns.
 func formatSymbolsText(w io.Writer, syms []CLISymbol) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tNAME\tKIND\tVISIBILITY\tFILE\tLINE")
+	// Show ref count columns if any symbol has refs.
+	hasRefs := false
 	for _, s := range syms {
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%d\n",
-			s.ID, s.Name, s.Kind, s.Visibility, s.File, s.StartLine)
+		if s.RefCount > 0 {
+			hasRefs = true
+			break
+		}
+	}
+	if hasRefs {
+		fmt.Fprintln(tw, "ID\tNAME\tKIND\tVISIBILITY\tREFS (EXT/TOTAL)\tFILE\tLINE")
+		for _, s := range syms {
+			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d/%d\t%s\t%d\n",
+				s.ID, s.Name, s.Kind, s.Visibility, s.ExternalRefCount, s.RefCount, s.File, s.StartLine)
+		}
+	} else {
+		fmt.Fprintln(tw, "ID\tNAME\tKIND\tVISIBILITY\tFILE\tLINE")
+		for _, s := range syms {
+			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%d\n",
+				s.ID, s.Name, s.Kind, s.Visibility, s.File, s.StartLine)
+		}
 	}
 	tw.Flush()
 }
@@ -77,10 +93,10 @@ func formatSummaryText(w io.Writer, summary CLIProjectSummary) {
 	}
 
 	if len(summary.TopSymbols) > 0 {
-		fmt.Fprintln(w, "Top Symbols by References:")
+		fmt.Fprintln(w, "Top Symbols by External References:")
 		for _, sym := range summary.TopSymbols {
-			fmt.Fprintf(w, "  %s (%s) - %d refs\n",
-				sym.Name, sym.Kind, sym.RefCount)
+			fmt.Fprintf(w, "  %s (%s) - %d ext / %d total refs\n",
+				sym.Name, sym.Kind, sym.ExternalRefCount, sym.RefCount)
 		}
 	}
 }

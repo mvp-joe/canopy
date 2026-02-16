@@ -42,7 +42,8 @@ const (
 	SortByName     SortField = "name"
 	SortByKind     SortField = "kind"
 	SortByFile     SortField = "file"
-	SortByRefCount SortField = "ref_count"
+	SortByRefCount         SortField = "ref_count"
+	SortByExternalRefCount SortField = "external_ref_count"
 )
 
 // SortOrder specifies ascending or descending.
@@ -62,8 +63,10 @@ type Sort struct {
 // SymbolResult extends Symbol with computed fields useful for discovery.
 type SymbolResult struct {
 	store.Symbol
-	FilePath string // resolved file path (empty for multi-file symbols)
-	RefCount int    // number of resolved references targeting this symbol
+	FilePath         string // resolved file path (empty for multi-file symbols)
+	RefCount         int    // total resolved references targeting this symbol
+	ExternalRefCount int    // refs from other files
+	InternalRefCount int    // refs from the same file as the symbol definition
 }
 
 // PagedResult wraps a page of results with total count for pagination.
@@ -108,6 +111,8 @@ func symbolSortColumn(field SortField) string {
 		return "f.path"
 	case SortByRefCount:
 		return "ref_count"
+	case SortByExternalRefCount:
+		return "external_ref_count"
 	default:
 		return "s.name"
 	}
@@ -191,7 +196,8 @@ func (q *QueryBuilder) Symbols(filter SymbolFilter, sort Sort, page Pagination) 
 
 	dataSQL := fmt.Sprintf(
 		`SELECT %s, COALESCE(f.path, '') AS file_path,
-			(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count
+			(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count,
+			(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 		 FROM symbols s
 		 LEFT JOIN files f ON s.file_id = f.id
 		 %s
@@ -367,7 +373,8 @@ func (q *QueryBuilder) SearchSymbols(pattern string, filter SymbolFilter, sort S
 
 	dataSQL := fmt.Sprintf(
 		`SELECT %s, COALESCE(f.path, '') AS file_path,
-			(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count
+			(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count,
+			(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 		 FROM symbols s
 		 LEFT JOIN files f ON s.file_id = f.id
 		 %s
@@ -493,11 +500,12 @@ func (q *QueryBuilder) ProjectSummary(topN int) (*ProjectSummary, error) {
 	if topN > 0 {
 		topSQL := fmt.Sprintf(
 			`SELECT %s, COALESCE(f.path, '') AS file_path,
-				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count
+				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count,
+				(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 			 FROM symbols s
 			 LEFT JOIN files f ON s.file_id = f.id
 			 WHERE (SELECT COUNT(*) FROM resolved_references rr2 WHERE rr2.target_symbol_id = s.id) > 0
-			 ORDER BY ref_count DESC
+			 ORDER BY external_ref_count DESC
 			 LIMIT ?`,
 			prefixSymbolCols("s"),
 		)
@@ -568,7 +576,8 @@ func (q *QueryBuilder) PackageSummary(packagePath string, packageID *int64) (*Pa
 	symRow := q.store.DB().QueryRow(
 		fmt.Sprintf(
 			`SELECT %s, COALESCE(f.path, '') AS file_path,
-				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count
+				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count,
+				(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 			 FROM symbols s
 			 LEFT JOIN files f ON s.file_id = f.id
 			 WHERE s.id = ?`,
@@ -615,13 +624,14 @@ func (q *QueryBuilder) PackageSummary(packagePath string, packageID *int64) (*Pa
 	if pathPrefix != "" {
 		expSQL := fmt.Sprintf(
 			`SELECT %s, COALESCE(f.path, '') AS file_path,
-				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count
+				(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id) AS ref_count,
+				(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 			 FROM symbols s
 			 JOIN files f ON s.file_id = f.id
 			 WHERE f.path LIKE ? ESCAPE '\'
 			   AND s.visibility = 'public'
 			   AND s.kind NOT IN ('package', 'module', 'namespace')
-			 ORDER BY ref_count DESC`,
+			 ORDER BY external_ref_count DESC`,
 			prefixSymbolCols("s"),
 		)
 		expRows, err := q.store.DB().Query(expSQL, escapeLike(pathPrefix)+"%")
@@ -765,12 +775,13 @@ func scanSymbolResult(row scanner) (SymbolResult, error) {
 		&sr.ID, &sr.FileID, &sr.Name, &sr.Kind, &sr.Visibility, &mods,
 		&sr.SignatureHash, &sr.StartLine, &sr.StartCol, &sr.EndLine, &sr.EndCol,
 		&sr.ParentSymbolID,
-		&sr.FilePath, &sr.RefCount,
+		&sr.FilePath, &sr.RefCount, &sr.ExternalRefCount,
 	)
 	if err != nil {
 		return sr, err
 	}
 	sr.Modifiers = store.UnmarshalModifiers(mods)
+	sr.InternalRefCount = sr.RefCount - sr.ExternalRefCount
 	return sr, nil
 }
 

@@ -945,20 +945,22 @@ func TestPackageSummary_ExportedSortedByRefCount(t *testing.T) {
 	t.Parallel()
 	q, s := newTestQueryBuilder(t)
 	fID := insertFile(t, s, "internal/store/store.go", "go")
+	otherFID := insertFile(t, s, "cmd/main.go", "go")
 	insertSymbol(t, s, &fID, "store", "package", "public", nil)
 	sym1 := insertSymbol(t, s, &fID, "Alpha", "function", "public", nil)
 	sym2 := insertSymbol(t, s, &fID, "Beta", "function", "public", nil)
 
+	// Use otherFID so refs count as external.
 	for range 5 {
-		insertResolvedRef(t, s, fID, sym2)
+		insertResolvedRef(t, s, otherFID, sym2)
 	}
-	insertResolvedRef(t, s, fID, sym1)
+	insertResolvedRef(t, s, otherFID, sym1)
 
 	summary, err := q.PackageSummary("internal/store", nil)
 	require.NoError(t, err)
 	require.Len(t, summary.ExportedSymbols, 2)
-	assert.Equal(t, "Beta", summary.ExportedSymbols[0].Name)  // 5 refs
-	assert.Equal(t, "Alpha", summary.ExportedSymbols[1].Name) // 1 ref
+	assert.Equal(t, "Beta", summary.ExportedSymbols[0].Name)  // 5 ext refs
+	assert.Equal(t, "Alpha", summary.ExportedSymbols[1].Name) // 1 ext ref
 }
 
 func TestPackageSummary_KindCounts(t *testing.T) {

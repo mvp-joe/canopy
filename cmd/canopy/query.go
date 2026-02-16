@@ -177,6 +177,8 @@ func buildSort() canopy.Sort {
 		field = canopy.SortByFile
 	case "ref_count":
 		field = canopy.SortByRefCount
+	case "external_ref_count":
+		field = canopy.SortByExternalRefCount
 	default:
 		field = canopy.SortByName
 	}
@@ -212,17 +214,19 @@ func symbolToCLI(sym *store.Symbol, filePath string, refCount int) CLISymbol {
 // symbolResultToCLI converts a canopy.SymbolResult to a CLISymbol.
 func symbolResultToCLI(sr canopy.SymbolResult) CLISymbol {
 	return CLISymbol{
-		ID:         sr.ID,
-		Name:       sr.Name,
-		Kind:       sr.Kind,
-		Visibility: sr.Visibility,
-		Modifiers:  sr.Modifiers,
-		File:       sr.FilePath,
-		StartLine:  sr.StartLine,
-		StartCol:   sr.StartCol,
-		EndLine:    sr.EndLine,
-		EndCol:     sr.EndCol,
-		RefCount:   sr.RefCount,
+		ID:               sr.ID,
+		Name:             sr.Name,
+		Kind:             sr.Kind,
+		Visibility:       sr.Visibility,
+		Modifiers:        sr.Modifiers,
+		File:             sr.FilePath,
+		StartLine:        sr.StartLine,
+		StartCol:         sr.StartCol,
+		EndLine:          sr.EndLine,
+		EndCol:           sr.EndCol,
+		RefCount:         sr.RefCount,
+		ExternalRefCount: sr.ExternalRefCount,
+		InternalRefCount: sr.InternalRefCount,
 	}
 }
 

@@ -10,17 +10,19 @@ type CLIResult struct {
 
 // CLISymbol is a JSON-friendly symbol representation.
 type CLISymbol struct {
-	ID         int64    `json:"id"`
-	Name       string   `json:"name"`
-	Kind       string   `json:"kind"`
-	Visibility string   `json:"visibility"`
-	Modifiers  []string `json:"modifiers,omitempty"`
-	File       string   `json:"file,omitempty"`
-	StartLine  int      `json:"start_line"`
-	StartCol   int      `json:"start_col"`
-	EndLine    int      `json:"end_line"`
-	EndCol     int      `json:"end_col"`
-	RefCount   int      `json:"ref_count,omitempty"`
+	ID               int64    `json:"id"`
+	Name             string   `json:"name"`
+	Kind             string   `json:"kind"`
+	Visibility       string   `json:"visibility"`
+	Modifiers        []string `json:"modifiers,omitempty"`
+	File             string   `json:"file,omitempty"`
+	StartLine        int      `json:"start_line"`
+	StartCol         int      `json:"start_col"`
+	EndLine          int      `json:"end_line"`
+	EndCol           int      `json:"end_col"`
+	RefCount         int      `json:"ref_count,omitempty"`
+	ExternalRefCount int      `json:"external_ref_count,omitempty"`
+	InternalRefCount int      `json:"internal_ref_count,omitempty"`
 }
 
 // CLILocation extends Location with the symbol ID for chaining.
