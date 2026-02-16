@@ -9,18 +9,15 @@
 //   insert_call_edge, insert_extension_binding
 //   db_query, log
 
+import filepath
 import strings
 from "lib/resolve_helpers" import find_scope_for_ref, find_caller_symbol_id, create_call_edges
 
 // ========== Helper functions (define-before-use) ==========
 
-// basename extracts the filename from a path (last segment after / or \).
+// basename extracts the filename from a path.
 func basename(path) {
-  parts := strings.split(path, "/")
-  result := parts[len(parts) - 1]
-  // Also handle backslash for Windows-style paths
-  parts2 := strings.split(result, "\\")
-  return parts2[len(parts2) - 1]
+  return filepath.base(path)
 }
 
 // ========== Main resolution pipeline ==========
