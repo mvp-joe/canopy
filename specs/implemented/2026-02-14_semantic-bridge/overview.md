@@ -26,7 +26,7 @@ Canopy is a Go library that provides deterministic, scope-aware semantic code an
 
 ## Current Status
 
-Planning
+Complete
 
 ## Key Files
 

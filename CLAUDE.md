@@ -52,7 +52,7 @@ Source Files → Engine → tree-sitter Parse → Extraction Scripts → SQLite 
 
 ## Spec and Reference
 
-- **Spec root:** `specs/2026-02-14_semantic-bridge/` — 8 files covering architecture, schema (16 tables, v3), interfaces, 7-phase implementation plan, test strategy, dependencies, decisions.
+- **Spec root:** `specs/implemented/2026-02-14_semantic-bridge/` — 8 files covering architecture, schema (16 tables, v3), interfaces, 7-phase implementation plan, test strategy, dependencies, decisions.
 - **Spike:** `.spikes/risor-treesitter/` — Proof-of-concept validating Risor ↔ tree-sitter interop. Run with `cd .spikes/risor-treesitter && go build -o spike && ./spike`.
 - **LSP references:** `.scratch/` — Cloned LSP implementations (gopls, tsserver, pyright, etc.) for oracle verification during development. Populated via `/clone-lsps` command.
 
