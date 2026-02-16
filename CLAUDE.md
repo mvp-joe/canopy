@@ -50,6 +50,20 @@ Source Files → Engine → tree-sitter Parse → Extraction Scripts → SQLite 
 
 `risor-context-medium.txt` in the repo root is a comprehensive Risor language reference. Read this file before writing or modifying any `.risor` scripts — it covers syntax, builtins, types, and idioms needed to write correct Risor code.
 
+### Risor Script Style Rules
+
+**Always use Risor's built-in `filepath` and `strings` modules** for string and path manipulation. Never write manual character-by-character iteration, manual path splitting, or manual prefix/suffix stripping. Examples:
+
+| Instead of | Use |
+|---|---|
+| `parts := strings.split(path, "/"); parts[len(parts)-1]` | `filepath.base(path)` |
+| `if len(s) > 0 && s[0] == "." { s = s[1:] }` | `strings.trim_prefix(s, ".")` |
+| `s[:len(s)-len(ext)]` | `strings.trim_suffix(s, ext)` |
+| Manual loop to find last dot for extension | `filepath.ext(path)` |
+| `strings.has_suffix(s, x); s[:len(s)-len(x)]` | `strings.trim_suffix(s, x)` |
+
+Import the modules at the top of the script: `import filepath` / `import strings`.
+
 ## Spec and Reference
 
 - **Spec root:** `specs/implemented/2026-02-14_semantic-bridge/` — 8 files covering architecture, schema (16 tables, v3), interfaces, 7-phase implementation plan, test strategy, dependencies, decisions.
