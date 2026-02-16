@@ -67,7 +67,7 @@
 - Pattern with no wildcards performs exact match
 - Search combined with kind filter narrows results
 - Search combined with PathPrefix filter narrows to that directory
-- Case sensitivity: "animal" does NOT match "Animal"
+- Case insensitivity: "animal" matches both "animal" and "Animal" (SQLite LIKE default)
 - Pattern `"*"` returns all symbols
 - Special SQL characters in pattern (`%`, `_`) are escaped before wildcard substitution
 - Pagination and sorting apply to search results

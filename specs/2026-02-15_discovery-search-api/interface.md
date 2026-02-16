@@ -115,7 +115,7 @@ Pattern examples:
 - `"*Controller*"` — contains
 - `"Get*User*"` — multiple wildcards
 
-Matching is case-sensitive. Pattern `*` alone returns all symbols (equivalent to `Symbols` with no filter).
+Matching is case-insensitive (SQLite LIKE default for ASCII). Pattern `*` alone returns all symbols (equivalent to `Symbols` with no filter).
 
 **Escaping:** Literal `%` and `_` characters in the input pattern are escaped (to `\%` and `\_` with `ESCAPE '\'`) before `*` is converted to `%`. This prevents SQL `LIKE` single-character wildcard `_` from matching unintentionally.
 
@@ -155,8 +155,8 @@ type PackageSummary struct {
     FileCount    int
     ExportedSymbols []SymbolResult   // public symbols, sorted by ref count descending
     KindCounts   map[string]int      // symbol count by kind within this package
-    Dependencies []string            // package paths this package imports
-    Dependents   []string            // package paths that import this package
+    Dependencies []string            // import source strings from files in this package
+    Dependents   []string            // file paths of files outside this package that import it
 }
 
 // Accepts either a file path prefix or a symbol ID.

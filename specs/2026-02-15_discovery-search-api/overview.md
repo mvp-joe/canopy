@@ -29,7 +29,7 @@ Extends the QueryBuilder with discovery, search, and summary capabilities so tha
 
 ## Current Status
 
-Planning
+Complete
 
 ## Key Files
 

@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS type_compositions (
 
 -- Indexes
 
+CREATE INDEX IF NOT EXISTS idx_files_language ON files(language);
 CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
 CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind);

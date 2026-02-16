@@ -45,6 +45,12 @@ func marshalModifiers(mods []string) string {
 	return string(b)
 }
 
+// UnmarshalModifiers converts JSON text back to []string.
+// Exported for use by QueryBuilder.
+func UnmarshalModifiers(s string) []string {
+	return unmarshalModifiers(s)
+}
+
 // unmarshalModifiers converts JSON text back to []string.
 func unmarshalModifiers(s string) []string {
 	if s == "" || s == "null" {

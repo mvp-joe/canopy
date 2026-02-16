@@ -11,7 +11,7 @@
 - (+) Predictable, deterministic results — no scoring ambiguity
 - (+) Fast with existing indexes (prefix matches can use index; suffix/infix do full scan but on indexed column)
 - (-) No typo tolerance — `"Animl"` won't match `"Animal"`
-- (-) Case-sensitive only in v1 (can add case-insensitive flag later)
+- (+) Case-insensitive matching by default (SQLite LIKE for ASCII) — useful for symbol discovery
 - Fuzzy search can be layered on later if needed (trigram extension or Go-side filtering)
 
 ## 2026-02-15: No batched graph traversal in v1
