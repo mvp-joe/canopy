@@ -6,5 +6,16 @@
     { "name": "__construct", "kind": "method", "file": "types.php", "line": 9 },
     { "name": "render", "kind": "method", "file": "types.php", "line": 13 },
     { "name": "createBox", "kind": "function", "file": "types.php", "line": 18 }
+  ],
+  "type_members": [
+    { "parent": "Box", "name": "width", "kind": "property", "type_expr": "int", "visibility": "private" }
+  ],
+  "function_params": [
+    { "parent": "__construct", "name": "width", "ordinal": 0, "type_expr": "int" },
+    { "parent": "createBox", "name": "w", "ordinal": 0, "type_expr": "int" },
+    { "parent": "createBox", "name": "", "ordinal": 0, "type_expr": "Box", "is_return": true }
+  ],
+  "implementations": [
+    { "type": "Box", "interface": "Renderable" }
   ]
 }

@@ -1,5 +1,10 @@
 {
   "definitions": [
+    { "name": "Box", "kind": "class", "file": "Box.java", "line": 0 },
+    { "name": "Box", "kind": "constructor", "file": "Box.java", "line": 3 },
+    { "name": "getValue", "kind": "method", "file": "Box.java", "line": 7 },
+    { "name": "compareTo", "kind": "method", "file": "Box.java", "line": 11 },
+    { "name": "of", "kind": "method", "file": "Box.java", "line": 15 },
     { "name": "Container", "kind": "class", "file": "Container.java", "line": 0 },
     { "name": "Container", "kind": "constructor", "file": "Container.java", "line": 3 },
     { "name": "getValue", "kind": "method", "file": "Container.java", "line": 7 },
@@ -9,5 +14,46 @@
     { "name": "NumberBox", "kind": "class", "file": "NumberBox.java", "line": 0 },
     { "name": "NumberBox", "kind": "constructor", "file": "NumberBox.java", "line": 3 },
     { "name": "doubleValue", "kind": "method", "file": "NumberBox.java", "line": 7 }
+  ],
+  "type_members": [
+    { "parent": "Box", "name": "value", "kind": "field", "type_expr": "T", "visibility": "private" },
+    { "parent": "Box", "name": "Box", "kind": "constructor", "visibility": "public" },
+    { "parent": "Box", "name": "getValue", "kind": "method", "type_expr": "T", "visibility": "public" },
+    { "parent": "Box", "name": "compareTo", "kind": "method", "type_expr": "int", "visibility": "public" },
+    { "parent": "Box", "name": "of", "kind": "method", "type_expr": "Box<V>", "visibility": "public" },
+    { "parent": "Container", "name": "value", "kind": "field", "type_expr": "T", "visibility": "private" },
+    { "parent": "Container", "name": "Container", "kind": "constructor", "visibility": "public" },
+    { "parent": "Container", "name": "getValue", "kind": "method", "type_expr": "T", "visibility": "public" },
+    { "parent": "Container", "name": "transform", "kind": "method", "type_expr": "R", "visibility": "public" },
+    { "parent": "NumberBox", "name": "number", "kind": "field", "type_expr": "N", "visibility": "private" },
+    { "parent": "NumberBox", "name": "NumberBox", "kind": "constructor", "visibility": "public" },
+    { "parent": "NumberBox", "name": "doubleValue", "kind": "method", "type_expr": "double", "visibility": "public" },
+    { "parent": "Transformer", "name": "apply", "kind": "method", "type_expr": "B", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "Box", "parent_file": "Box.java", "name": "value", "ordinal": 0, "type_expr": "T" },
+    { "parent": "getValue", "parent_file": "Box.java", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true },
+    { "parent": "compareTo", "name": "other", "ordinal": 0, "type_expr": "U" },
+    { "parent": "compareTo", "name": "", "ordinal": 0, "type_expr": "int", "is_return": true },
+    { "parent": "of", "name": "item", "ordinal": 0, "type_expr": "V" },
+    { "parent": "of", "name": "", "ordinal": 0, "type_expr": "Box<V>", "is_return": true },
+    { "parent": "Container", "parent_file": "Container.java", "name": "value", "ordinal": 0, "type_expr": "T" },
+    { "parent": "getValue", "parent_file": "Container.java", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true },
+    { "parent": "transform", "name": "fn", "ordinal": 0, "type_expr": "Transformer<T, R>" },
+    { "parent": "transform", "name": "", "ordinal": 0, "type_expr": "R", "is_return": true },
+    { "parent": "NumberBox", "name": "number", "ordinal": 0, "type_expr": "N" },
+    { "parent": "doubleValue", "name": "", "ordinal": 0, "type_expr": "double", "is_return": true },
+    { "parent": "apply", "name": "input", "ordinal": 0, "type_expr": "A" },
+    { "parent": "apply", "name": "", "ordinal": 0, "type_expr": "B", "is_return": true }
+  ],
+  "type_params": [
+    { "parent": "Box", "name": "T", "ordinal": 0 },
+    { "parent": "Container", "name": "T", "ordinal": 0 },
+    { "parent": "NumberBox", "name": "N", "ordinal": 0, "constraints": "extends Number" },
+    { "parent": "Transformer", "name": "A", "ordinal": 0 },
+    { "parent": "Transformer", "name": "B", "ordinal": 1 },
+    { "parent": "compareTo", "name": "U", "ordinal": 0, "constraints": "extends Comparable<U>" },
+    { "parent": "of", "name": "V", "ordinal": 0 },
+    { "parent": "transform", "name": "R", "ordinal": 0 }
   ]
 }

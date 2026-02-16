@@ -10,5 +10,11 @@
     { "name": "handle", "kind": "method", "file": "types.py", "line": 18 },
     { "name": "close", "kind": "method", "file": "types.py", "line": 21 },
     { "name": "new_server", "kind": "function", "file": "types.py", "line": 25 }
+  ],
+  "type_members": [
+    { "parent": "Server", "name": "Handler", "kind": "base_class", "type_expr": "Handler", "visibility": "public" }
+  ],
+  "implementations": [
+    { "type": "Server", "interface": "Handler" }
   ]
 }

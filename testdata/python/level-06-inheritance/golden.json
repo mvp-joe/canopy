@@ -9,5 +9,15 @@
     { "name": "Penguin", "kind": "class", "file": "animals.py", "line": 15 },
     { "name": "speak", "kind": "method", "file": "animals.py", "line": 16 },
     { "name": "fly", "kind": "method", "file": "animals.py", "line": 19 }
+  ],
+  "type_members": [
+    { "parent": "Bird", "name": "Animal", "kind": "base_class" },
+    { "parent": "Bird", "name": "Flyable", "kind": "base_class" },
+    { "parent": "Penguin", "name": "Bird", "kind": "base_class" }
+  ],
+  "implementations": [
+    { "type": "Bird", "interface": "Animal" },
+    { "type": "Bird", "interface": "Flyable" },
+    { "type": "Penguin", "interface": "Bird" }
   ]
 }

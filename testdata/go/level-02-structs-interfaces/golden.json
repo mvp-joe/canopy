@@ -7,5 +7,26 @@
     { "name": "Handle", "kind": "method", "file": "types.go", "line": 17 },
     { "name": "Close", "kind": "method", "file": "types.go", "line": 21 },
     { "name": "NewServer", "kind": "function", "file": "types.go", "line": 25 }
+  ],
+  "type_members": [
+    { "parent": "Config", "name": "Host", "kind": "field", "type_expr": "string", "visibility": "public" },
+    { "parent": "Config", "name": "Port", "kind": "field", "type_expr": "int", "visibility": "public" },
+    { "parent": "Handler", "name": "Handle", "kind": "method", "visibility": "public" },
+    { "parent": "Handler", "name": "Close", "kind": "method", "visibility": "public" },
+    { "parent": "Server", "name": "Config", "kind": "embedded", "type_expr": "Config", "visibility": "public" },
+    { "parent": "Server", "name": "Name", "kind": "field", "type_expr": "string", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "Handle", "name": "s", "ordinal": 0, "type_expr": "*Server", "is_receiver": true },
+    { "parent": "Handle", "name": "req", "ordinal": 0, "type_expr": "string" },
+    { "parent": "Handle", "name": "", "ordinal": 0, "type_expr": "string", "is_return": true },
+    { "parent": "Handle", "name": "", "ordinal": 1, "type_expr": "error", "is_return": true },
+    { "parent": "Close", "name": "s", "ordinal": 0, "type_expr": "*Server", "is_receiver": true },
+    { "parent": "Close", "name": "", "ordinal": 0, "type_expr": "error", "is_return": true },
+    { "parent": "NewServer", "name": "name", "ordinal": 0, "type_expr": "string" },
+    { "parent": "NewServer", "name": "", "ordinal": 0, "type_expr": "*Server", "is_return": true }
+  ],
+  "implementations": [
+    { "type": "Server", "interface": "Handler" }
   ]
 }

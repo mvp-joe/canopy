@@ -8,6 +8,27 @@
     { "name": "print_it", "kind": "function", "file": "generics.rs", "line": 23 },
     { "name": "main", "kind": "function", "file": "generics.rs", "line": 27 }
   ],
+  "type_members": [
+    { "parent": "Pair", "name": "first", "kind": "field", "type_expr": "T", "visibility": "private" },
+    { "parent": "Pair", "name": "second", "kind": "field", "type_expr": "T", "visibility": "private" },
+    { "parent": "Summarize", "name": "summary", "kind": "method", "visibility": "private" }
+  ],
+  "function_params": [
+    { "parent": "new", "name": "first", "ordinal": 0, "type_expr": "T" },
+    { "parent": "new", "name": "second", "ordinal": 1, "type_expr": "T" },
+    { "parent": "new", "name": "", "ordinal": 0, "type_expr": "Self", "is_return": true },
+    { "parent": "first", "name": "self", "ordinal": 0, "type_expr": "&self", "is_receiver": true },
+    { "parent": "first", "name": "", "ordinal": 0, "type_expr": "&T", "is_return": true },
+    { "parent": "largest", "name": "a", "ordinal": 0, "type_expr": "T" },
+    { "parent": "largest", "name": "b", "ordinal": 1, "type_expr": "T" },
+    { "parent": "largest", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true },
+    { "parent": "print_it", "name": "item", "ordinal": 0, "type_expr": "&T" }
+  ],
+  "type_params": [
+    { "parent": "Pair", "name": "T", "ordinal": 0 },
+    { "parent": "largest", "name": "T", "ordinal": 0, "constraints": "PartialOrd" },
+    { "parent": "print_it", "name": "T", "ordinal": 0, "constraints": "Summarize" }
+  ],
   "calls": [
     { "caller": "main", "callee": "new" },
     { "caller": "main", "callee": "largest" }

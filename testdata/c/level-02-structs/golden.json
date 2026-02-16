@@ -5,5 +5,22 @@
     { "name": "Color", "kind": "enum", "file": "types.c", "line": 10 },
     { "name": "make_point", "kind": "function", "file": "types.c", "line": 16 },
     { "name": "print_point", "kind": "function", "file": "types.c", "line": 23 }
+  ],
+  "imports": [
+    { "file": "types.c", "source": "stdio.h", "kind": "header" },
+    { "file": "types.c", "source": "string.h", "kind": "header" }
+  ],
+  "type_members": [
+    { "parent": "Point", "name": "x", "kind": "field", "type_expr": "int", "visibility": "public" },
+    { "parent": "Point", "name": "y", "kind": "field", "type_expr": "int", "visibility": "public" },
+    { "parent": "Color", "name": "RED", "kind": "variant", "visibility": "public" },
+    { "parent": "Color", "name": "GREEN", "kind": "variant", "visibility": "public" },
+    { "parent": "Color", "name": "BLUE", "kind": "variant", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "make_point", "name": "x", "ordinal": 0, "type_expr": "int" },
+    { "parent": "make_point", "name": "y", "ordinal": 1, "type_expr": "int" },
+    { "parent": "make_point", "name": "", "ordinal": 0, "type_expr": "Point", "is_return": true },
+    { "parent": "print_point", "name": "p", "ordinal": 0, "type_expr": "Point" }
   ]
 }

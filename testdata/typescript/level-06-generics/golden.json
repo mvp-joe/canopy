@@ -9,6 +9,22 @@
     { "name": "box", "kind": "constant", "file": "main.ts", "line": 21 },
     { "name": "result", "kind": "constant", "file": "main.ts", "line": 22 }
   ],
+  "type_members": [
+    { "parent": "Sortable", "name": "compareTo", "kind": "method", "visibility": "public" },
+    { "parent": "NumBox", "name": "value", "kind": "property", "type_expr": "number", "visibility": "public" },
+    { "parent": "NumBox", "name": "constructor", "kind": "method", "visibility": "public" },
+    { "parent": "NumBox", "name": "compareTo", "kind": "method", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "constructor", "name": "v", "ordinal": 0, "type_expr": "number" },
+    { "parent": "compareTo", "name": "other", "ordinal": 0, "type_expr": "Sortable" },
+    { "parent": "compareTo", "name": "", "ordinal": 0, "type_expr": "number", "is_return": true },
+    { "parent": "first", "name": "items", "ordinal": 0, "type_expr": "T[]" },
+    { "parent": "first", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true }
+  ],
+  "type_params": [
+    { "parent": "first", "name": "T", "ordinal": 0 }
+  ],
   "references": [
     {
       "from": { "file": "main.ts", "line": 21, "col": 18 },

@@ -6,6 +6,17 @@
     { "name": "greet", "kind": "function", "file": "util.ts", "line": 0 },
     { "name": "add", "kind": "function", "file": "util.ts", "line": 4 }
   ],
+  "imports": [
+    { "file": "main.ts", "source": "./util", "imported_name": "greet", "kind": "named" },
+    { "file": "main.ts", "source": "./util", "imported_name": "add", "kind": "named" }
+  ],
+  "function_params": [
+    { "parent": "greet", "name": "name", "ordinal": 0, "type_expr": "string" },
+    { "parent": "greet", "name": "", "ordinal": 0, "type_expr": "string", "is_return": true },
+    { "parent": "add", "name": "a", "ordinal": 0, "type_expr": "number" },
+    { "parent": "add", "name": "b", "ordinal": 1, "type_expr": "number" },
+    { "parent": "add", "name": "", "ordinal": 0, "type_expr": "number", "is_return": true }
+  ],
   "references": [
     {
       "from": { "file": "main.ts", "line": 3, "col": 14 },

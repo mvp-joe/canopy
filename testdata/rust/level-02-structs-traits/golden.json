@@ -5,5 +5,21 @@
     { "name": "handle", "kind": "method", "file": "types.rs", "line": 11 },
     { "name": "reset", "kind": "method", "file": "types.rs", "line": 15 },
     { "name": "new", "kind": "function", "file": "types.rs", "line": 21 }
+  ],
+  "type_members": [
+    { "parent": "Config", "name": "name", "kind": "field", "type_expr": "String", "visibility": "private" },
+    { "parent": "Config", "name": "retries", "kind": "field", "type_expr": "u32", "visibility": "private" },
+    { "parent": "Handler", "name": "handle", "kind": "method", "visibility": "private" },
+    { "parent": "Handler", "name": "reset", "kind": "method", "visibility": "private" }
+  ],
+  "function_params": [
+    { "parent": "handle", "name": "self", "ordinal": 0, "type_expr": "&self", "is_receiver": true },
+    { "parent": "handle", "name": "", "ordinal": 0, "type_expr": "bool", "is_return": true },
+    { "parent": "reset", "name": "self", "ordinal": 0, "type_expr": "&mut self", "is_receiver": true },
+    { "parent": "new", "name": "name", "ordinal": 0, "type_expr": "String" },
+    { "parent": "new", "name": "", "ordinal": 0, "type_expr": "Self", "is_return": true }
+  ],
+  "implementations": [
+    { "type": "Config", "interface": "Handler" }
   ]
 }

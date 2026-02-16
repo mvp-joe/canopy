@@ -9,6 +9,23 @@
     { "name": "MyReadWriter", "kind": "struct", "file": "embed.go", "line": 23 },
     { "name": "Write", "kind": "method", "file": "embed.go", "line": 28 }
   ],
+  "type_members": [
+    { "parent": "Reader", "name": "Read", "kind": "method", "visibility": "public" },
+    { "parent": "Writer", "name": "Write", "kind": "method", "visibility": "public" },
+    { "parent": "ReadWriter", "name": "Reader", "kind": "embedded", "type_expr": "Reader", "visibility": "public" },
+    { "parent": "ReadWriter", "name": "Writer", "kind": "embedded", "type_expr": "Writer", "visibility": "public" },
+    { "parent": "MyReader", "name": "Name", "kind": "field", "type_expr": "string", "visibility": "public" },
+    { "parent": "MyReadWriter", "name": "MyReader", "kind": "embedded", "type_expr": "MyReader", "visibility": "public" },
+    { "parent": "MyReadWriter", "name": "Tag", "kind": "field", "type_expr": "string", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "Read", "name": "r", "ordinal": 0, "type_expr": "*MyReader", "is_receiver": true },
+    { "parent": "Read", "name": "data", "ordinal": 0, "type_expr": "string" },
+    { "parent": "Read", "name": "", "ordinal": 0, "type_expr": "int", "is_return": true },
+    { "parent": "Write", "name": "rw", "ordinal": 0, "type_expr": "*MyReadWriter", "is_receiver": true },
+    { "parent": "Write", "name": "data", "ordinal": 0, "type_expr": "string" },
+    { "parent": "Write", "name": "", "ordinal": 0, "type_expr": "int", "is_return": true }
+  ],
   "implementations": [
     { "type": "MyReader", "interface": "Reader" },
     { "type": "MyReadWriter", "interface": "Writer" }

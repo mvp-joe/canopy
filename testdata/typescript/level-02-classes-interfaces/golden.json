@@ -6,5 +6,23 @@
     { "name": "handle", "kind": "method", "file": "types.ts", "line": 12 },
     { "name": "close", "kind": "method", "file": "types.ts", "line": 16 },
     { "name": "newServer", "kind": "function", "file": "types.ts", "line": 19 }
+  ],
+  "type_members": [
+    { "parent": "Handler", "name": "handle", "kind": "method", "visibility": "public" },
+    { "parent": "Handler", "name": "close", "kind": "method", "visibility": "public" },
+    { "parent": "Server", "name": "name", "kind": "property", "type_expr": "string", "visibility": "public" },
+    { "parent": "Server", "name": "constructor", "kind": "method", "visibility": "public" },
+    { "parent": "Server", "name": "handle", "kind": "method", "visibility": "public" },
+    { "parent": "Server", "name": "close", "kind": "method", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "constructor", "name": "name", "ordinal": 0, "type_expr": "string" },
+    { "parent": "handle", "name": "req", "ordinal": 0, "type_expr": "string" },
+    { "parent": "handle", "name": "", "ordinal": 0, "type_expr": "string", "is_return": true },
+    { "parent": "newServer", "name": "name", "ordinal": 0, "type_expr": "string" },
+    { "parent": "newServer", "name": "", "ordinal": 0, "type_expr": "Server", "is_return": true }
+  ],
+  "implementations": [
+    { "type": "Server", "interface": "Handler" }
   ]
 }

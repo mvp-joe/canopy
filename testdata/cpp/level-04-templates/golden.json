@@ -4,6 +4,28 @@
     { "name": "Pair", "kind": "class", "file": "templates.cpp", "line": 7 },
     { "name": "main", "kind": "function", "file": "templates.cpp", "line": 16 }
   ],
+  "imports": [
+    { "file": "templates.cpp", "source": "string", "kind": "header" }
+  ],
+  "type_members": [
+    { "parent": "Pair", "name": "first", "kind": "field", "type_expr": "T", "visibility": "public" },
+    { "parent": "Pair", "name": "second", "kind": "field", "type_expr": "U", "visibility": "public" },
+    { "parent": "Pair", "name": "Pair", "kind": "method", "visibility": "public" },
+    { "parent": "Pair", "name": "getFirst", "kind": "method", "type_expr": "T", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "max_val", "name": "a", "ordinal": 0, "type_expr": "T" },
+    { "parent": "max_val", "name": "b", "ordinal": 1, "type_expr": "T" },
+    { "parent": "max_val", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true },
+    { "parent": "Pair", "name": "f", "ordinal": 0, "type_expr": "T" },
+    { "parent": "Pair", "name": "s", "ordinal": 1, "type_expr": "U" },
+    { "parent": "getFirst", "name": "", "ordinal": 0, "type_expr": "T", "is_return": true }
+  ],
+  "type_params": [
+    { "parent": "Pair", "name": "T", "ordinal": 0 },
+    { "parent": "Pair", "name": "U", "ordinal": 1 },
+    { "parent": "max_val", "name": "T", "ordinal": 0 }
+  ],
   "references": [
     {
       "from": { "file": "templates.cpp", "line": 17, "col": 12 },
@@ -13,5 +35,8 @@
       "from": { "file": "templates.cpp", "line": 18, "col": 4 },
       "to": { "name": "Pair", "file": "templates.cpp", "line": 7 }
     }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "max_val" }
   ]
 }

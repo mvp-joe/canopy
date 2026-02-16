@@ -5,5 +5,22 @@
     { "name": "NewPair", "kind": "function", "file": "generics.go", "line": 7 },
     { "name": "Map", "kind": "function", "file": "generics.go", "line": 11 },
     { "name": "result", "kind": "variable", "file": "generics.go", "line": 12 }
+  ],
+  "type_members": [
+    { "parent": "Pair", "name": "First", "kind": "field", "type_expr": "T", "visibility": "public" },
+    { "parent": "Pair", "name": "Second", "kind": "field", "type_expr": "T", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "NewPair", "name": "a", "ordinal": 0, "type_expr": "T" },
+    { "parent": "NewPair", "name": "", "ordinal": 0, "type_expr": "Pair[T]", "is_return": true },
+    { "parent": "Map", "name": "items", "ordinal": 0, "type_expr": "[]T" },
+    { "parent": "Map", "name": "fn", "ordinal": 1, "type_expr": "func(T) U" },
+    { "parent": "Map", "name": "", "ordinal": 0, "type_expr": "[]U", "is_return": true }
+  ],
+  "type_params": [
+    { "parent": "Pair", "name": "T", "ordinal": 0, "constraints": "any" },
+    { "parent": "NewPair", "name": "T", "ordinal": 0, "constraints": "any" },
+    { "parent": "Map", "name": "T", "ordinal": 0, "constraints": "any" },
+    { "parent": "Map", "name": "U", "ordinal": 1, "constraints": "any" }
   ]
 }

@@ -8,5 +8,17 @@
     { "name": "greet", "kind": "method", "file": "Types.java", "line": 12 },
     { "name": "reset", "kind": "method", "file": "Types.java", "line": 16 },
     { "name": "create", "kind": "method", "file": "Types.java", "line": 20 }
+  ],
+  "type_members": [
+    { "parent": "Greeter", "name": "greet", "kind": "method", "visibility": "public" },
+    { "parent": "Greeter", "name": "reset", "kind": "method", "visibility": "public" },
+    { "parent": "SimpleGreeter", "name": "prefix", "kind": "field", "type_expr": "String", "visibility": "private" },
+    { "parent": "SimpleGreeter", "name": "SimpleGreeter", "kind": "constructor", "visibility": "public" },
+    { "parent": "SimpleGreeter", "name": "greet", "kind": "method", "visibility": "public" },
+    { "parent": "SimpleGreeter", "name": "reset", "kind": "method", "visibility": "public" },
+    { "parent": "SimpleGreeter", "name": "create", "kind": "method", "visibility": "public" }
+  ],
+  "implementations": [
+    { "type": "SimpleGreeter", "interface": "Greeter" }
   ]
 }

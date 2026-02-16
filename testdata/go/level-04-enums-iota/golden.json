@@ -11,5 +11,9 @@
     { "name": "Warn", "kind": "constant", "file": "enums.go", "line": 12 },
     { "name": "Error", "kind": "constant", "file": "enums.go", "line": 12 },
     { "name": "String", "kind": "method", "file": "enums.go", "line": 19 }
+  ],
+  "function_params": [
+    { "parent": "String", "name": "c", "ordinal": 0, "type_expr": "Color", "is_receiver": true },
+    { "parent": "String", "name": "", "ordinal": 0, "type_expr": "string", "is_return": true }
   ]
 }

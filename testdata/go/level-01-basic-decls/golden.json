@@ -7,5 +7,27 @@
     { "name": "add", "kind": "function", "file": "main.go", "line": 12 },
     { "name": "main", "kind": "function", "file": "main.go", "line": 16 },
     { "name": "result", "kind": "variable", "file": "main.go", "line": 18 }
+  ],
+  "imports": [
+    { "file": "main.go", "source": "fmt", "imported_name": "fmt", "kind": "module" }
+  ],
+  "function_params": [
+    { "parent": "Hello", "name": "", "ordinal": 0, "type_expr": "string", "is_return": true },
+    { "parent": "add", "name": "a", "ordinal": 0, "type_expr": "int" },
+    { "parent": "add", "name": "", "ordinal": 0, "type_expr": "int", "is_return": true }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 17, "col": 13 },
+      "to": { "name": "Hello", "file": "main.go", "line": 8 }
+    },
+    {
+      "from": { "file": "main.go", "line": 18, "col": 11 },
+      "to": { "name": "add", "file": "main.go", "line": 12 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "Hello" },
+    { "caller": "main", "callee": "add" }
   ]
 }

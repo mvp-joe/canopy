@@ -1,48 +1,18 @@
 {
   "definitions": [
-    {
-      "name": "Shapes",
-      "kind": "module",
-      "file": "types.rb",
-      "line": 0
-    },
-    {
-      "name": "Shape",
-      "kind": "class",
-      "file": "types.rb",
-      "line": 1
-    },
-    {
-      "name": "initialize",
-      "kind": "method",
-      "file": "types.rb",
-      "line": 2
-    },
-    {
-      "name": "describe",
-      "kind": "method",
-      "file": "types.rb",
-      "line": 6
-    },
-    {
-      "name": "Circle",
-      "kind": "class",
-      "file": "types.rb",
-      "line": 11
-    },
-    {
-      "name": "initialize",
-      "kind": "method",
-      "file": "types.rb",
-      "line": 12
-    },
-    {
-      "name": "area",
-      "kind": "method",
-      "file": "types.rb",
-      "line": 17
-    }
+    { "name": "Shapes", "kind": "module", "file": "types.rb", "line": 0 },
+    { "name": "Shape", "kind": "class", "file": "types.rb", "line": 1 },
+    { "name": "initialize", "kind": "method", "file": "types.rb", "line": 2 },
+    { "name": "describe", "kind": "method", "file": "types.rb", "line": 6 },
+    { "name": "Circle", "kind": "class", "file": "types.rb", "line": 11 },
+    { "name": "initialize", "kind": "method", "file": "types.rb", "line": 12 },
+    { "name": "area", "kind": "method", "file": "types.rb", "line": 17 }
   ],
-  "references": [],
-  "calls": []
+  "function_params": [
+    { "parent": "initialize", "parent_file": "types.rb", "name": "name", "ordinal": 0 },
+    { "parent": "initialize", "parent_file": "types.rb", "name": "radius", "ordinal": 0 }
+  ],
+  "implementations": [
+    { "type": "Circle", "interface": "Shape" }
+  ]
 }

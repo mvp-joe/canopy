@@ -4,6 +4,15 @@
     { "name": "greet", "kind": "function", "file": "util.py", "line": 0 },
     { "name": "add", "kind": "function", "file": "util.py", "line": 4 }
   ],
+  "imports": [
+    { "file": "main.py", "source": "util", "imported_name": "add", "kind": "name" },
+    { "file": "main.py", "source": "util", "imported_name": "greet", "kind": "name" }
+  ],
+  "function_params": [
+    { "parent": "greet", "name": "name", "ordinal": 0 },
+    { "parent": "add", "name": "a", "ordinal": 0 },
+    { "parent": "add", "name": "b", "ordinal": 1 }
+  ],
   "references": [
     {
       "from": { "file": "main.py", "line": 4, "col": 10 },

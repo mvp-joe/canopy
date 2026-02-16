@@ -6,5 +6,21 @@
     { "name": "greet", "kind": "method", "file": "Util.java", "line": 1 },
     { "name": "add", "kind": "method", "file": "Util.java", "line": 5 },
     { "name": "isPositive", "kind": "method", "file": "Util.java", "line": 9 }
+  ],
+  "type_members": [
+    { "parent": "Main", "name": "main", "kind": "method", "type_expr": "void", "visibility": "public" },
+    { "parent": "Util", "name": "greet", "kind": "method", "type_expr": "String", "visibility": "public" },
+    { "parent": "Util", "name": "add", "kind": "method", "type_expr": "int", "visibility": "public" },
+    { "parent": "Util", "name": "isPositive", "kind": "method", "type_expr": "boolean", "visibility": "public" }
+  ],
+  "function_params": [
+    { "parent": "main", "name": "args", "ordinal": 0, "type_expr": "String[]" },
+    { "parent": "greet", "name": "name", "ordinal": 0, "type_expr": "String" },
+    { "parent": "greet", "name": "", "ordinal": 0, "type_expr": "String", "is_return": true },
+    { "parent": "add", "name": "a", "ordinal": 0, "type_expr": "int" },
+    { "parent": "add", "name": "b", "ordinal": 1, "type_expr": "int" },
+    { "parent": "add", "name": "", "ordinal": 0, "type_expr": "int", "is_return": true },
+    { "parent": "isPositive", "name": "n", "ordinal": 0, "type_expr": "int" },
+    { "parent": "isPositive", "name": "", "ordinal": 0, "type_expr": "boolean", "is_return": true }
   ]
 }

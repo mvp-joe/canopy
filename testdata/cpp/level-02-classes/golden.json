@@ -3,5 +3,17 @@
     { "name": "Animal", "kind": "class", "file": "types.cpp", "line": 2 },
     { "name": "Dog", "kind": "class", "file": "types.cpp", "line": 9 },
     { "name": "Point", "kind": "struct", "file": "types.cpp", "line": 15 }
+  ],
+  "type_members": [
+    { "parent": "Animal", "name": "name", "kind": "field", "type_expr": "std::string", "visibility": "public" },
+    { "parent": "Animal", "name": "Animal", "kind": "method", "visibility": "public" },
+    { "parent": "Animal", "name": "speak", "kind": "method", "visibility": "public" },
+    { "parent": "Dog", "name": "Dog", "kind": "method", "visibility": "public" },
+    { "parent": "Dog", "name": "speak", "kind": "method", "visibility": "public" },
+    { "parent": "Point", "name": "x", "kind": "field", "type_expr": "double", "visibility": "public" },
+    { "parent": "Point", "name": "y", "kind": "field", "type_expr": "double", "visibility": "public" }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" }
   ]
 }
