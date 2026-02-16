@@ -312,9 +312,11 @@ func runSymbolAt(cmd *cobra.Command, args []string) error {
 	filePath := lookupFilePath(s, sym.FileID)
 	cliSym := symbolToCLI(sym, filePath, 0)
 
+	one := 1
 	return outputResult(CLIResult{
-		Command: "symbol-at",
-		Results: cliSym,
+		Command:    "symbol-at",
+		Results:    cliSym,
+		TotalCount: &one,
 	})
 }
 
@@ -360,9 +362,11 @@ func runDefinition(cmd *cobra.Command, args []string) error {
 		cliLocs[i] = locationToCLI(loc, symID)
 	}
 
+	defCount := len(cliLocs)
 	return outputResult(CLIResult{
-		Command: "definition",
-		Results: cliLocs,
+		Command:    "definition",
+		Results:    cliLocs,
+		TotalCount: &defCount,
 	})
 }
 
@@ -403,9 +407,11 @@ func runReferences(cmd *cobra.Command, args []string) error {
 		cliLocs[i] = locationToCLI(loc, &symID)
 	}
 
+	refCount := len(cliLocs)
 	return outputResult(CLIResult{
-		Command: "references",
-		Results: cliLocs,
+		Command:    "references",
+		Results:    cliLocs,
+		TotalCount: &refCount,
 	})
 }
 
@@ -452,9 +458,11 @@ func runCallers(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	callerCount := len(cliEdges)
 	return outputResult(CLIResult{
-		Command: "callers",
-		Results: cliEdges,
+		Command:    "callers",
+		Results:    cliEdges,
+		TotalCount: &callerCount,
 	})
 }
 
@@ -501,9 +509,11 @@ func runCallees(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	calleeCount := len(cliEdges)
 	return outputResult(CLIResult{
-		Command: "callees",
-		Results: cliEdges,
+		Command:    "callees",
+		Results:    cliEdges,
+		TotalCount: &calleeCount,
 	})
 }
 
@@ -546,8 +556,10 @@ func runImplementations(cmd *cobra.Command, args []string) error {
 		cliLocs[i] = locationToCLI(loc, implSymID)
 	}
 
+	implCount := len(cliLocs)
 	return outputResult(CLIResult{
-		Command: "implementations",
-		Results: cliLocs,
+		Command:    "implementations",
+		Results:    cliLocs,
+		TotalCount: &implCount,
 	})
 }

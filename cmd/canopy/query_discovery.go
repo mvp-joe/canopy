@@ -336,9 +336,11 @@ func runDeps(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	depsCount := len(cliImports)
 	return outputResult(CLIResult{
-		Command: "deps",
-		Results: cliImports,
+		Command:    "deps",
+		Results:    cliImports,
+		TotalCount: &depsCount,
 	})
 }
 
@@ -374,8 +376,10 @@ func runDependents(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	depCount := len(cliImports)
 	return outputResult(CLIResult{
-		Command: "dependents",
-		Results: cliImports,
+		Command:    "dependents",
+		Results:    cliImports,
+		TotalCount: &depCount,
 	})
 }
