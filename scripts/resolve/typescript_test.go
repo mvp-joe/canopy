@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jward/canopy/internal/runtime"
 	"github.com/jward/canopy/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,10 @@ func (e *testEnv) extractTSSource(src string, filename string) int64 {
 // resolveTS runs the TypeScript resolution script.
 func (e *testEnv) resolveTS() {
 	e.t.Helper()
-	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "typescript.risor"), nil)
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, nil),
+	}
+	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "typescript.risor"), extras)
 	require.NoError(e.t, err)
 }
 

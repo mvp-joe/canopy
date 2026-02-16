@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jward/canopy/internal/runtime"
 	"github.com/jward/canopy/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,7 +49,10 @@ func (e *cppTestEnv) extractCppSource(src string, filename string) int64 {
 // resolveCpp runs the C++ resolution script.
 func (e *cppTestEnv) resolveCpp() {
 	e.t.Helper()
-	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "cpp.risor"), nil)
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, nil),
+	}
+	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "cpp.risor"), extras)
 	require.NoError(e.t, err)
 }
 

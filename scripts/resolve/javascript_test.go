@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jward/canopy/internal/runtime"
 	"github.com/jward/canopy/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,10 @@ func (e *testEnv) extractJSSource(src string, filename string) int64 {
 // resolveJS runs the JavaScript resolution script.
 func (e *testEnv) resolveJS() {
 	e.t.Helper()
-	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "javascript.risor"), nil)
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, nil),
+	}
+	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "javascript.risor"), extras)
 	require.NoError(e.t, err)
 }
 

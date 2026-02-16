@@ -78,7 +78,10 @@ func (e *testEnv) extractGoSource(src string, filename string) int64 {
 // resolve runs the Go resolution script.
 func (e *testEnv) resolve() {
 	e.t.Helper()
-	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "go.risor"), nil)
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, nil),
+	}
+	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "go.risor"), extras)
 	require.NoError(e.t, err)
 }
 

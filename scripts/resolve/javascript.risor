@@ -217,8 +217,14 @@ for _, f := range js_files {
 // Track which references have been resolved
 resolved_set := {}
 
+resolve_files := files_to_resolve("javascript")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range js_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -278,7 +284,7 @@ for _, f := range js_files {
 }
 
 // --- (b) Cross-file import resolution (ES6 + CommonJS) ---
-for _, f := range js_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -427,7 +433,7 @@ for _, f := range js_files {
 }
 
 // --- (c) Method/field resolution ---
-for _, f := range js_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -505,7 +511,7 @@ for _, f := range js_files {
 }
 
 // --- (d) Call graph edge creation ---
-for _, f := range js_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -576,6 +582,7 @@ for _, meth := range all_methods {
   if !(meth_fid_str in file_symbols_map) {
     continue
   }
+  if !(meth_fid_str in resolve_fid_set) { continue }
 
   parent_id := nil
   if "parent_symbol_id" in meth {

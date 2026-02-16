@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jward/canopy/internal/runtime"
 	"github.com/jward/canopy/internal/store"
 )
 
@@ -40,7 +41,10 @@ func (e *testEnv) extractJavaSource(src string, filename string) int64 {
 // resolveJava runs the Java resolution script.
 func (e *testEnv) resolveJava() {
 	e.t.Helper()
-	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "java.risor"), nil)
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, nil),
+	}
+	err := e.rt.RunScript(context.Background(), filepath.Join("resolve", "java.risor"), extras)
 	require.NoError(e.t, err)
 }
 

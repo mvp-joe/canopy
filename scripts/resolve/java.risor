@@ -167,9 +167,15 @@ for _, f := range java_files {
 // Track which references have been resolved (ref_id → true)
 resolved_set := {}
 
+resolve_files := files_to_resolve("java")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
 // Resolve references to symbols in the same file using scope chain.
-for _, f := range java_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -233,7 +239,7 @@ for _, f := range java_files {
 
 // --- (b) Cross-file same-package resolution ---
 // Java files in the same package can see each other's types.
-for _, f := range java_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   pkg_name := file_package_map[fid_str]
@@ -285,7 +291,7 @@ for _, f := range java_files {
 // --- (c) Cross-package import resolution ---
 // For unresolved references, check if the name matches an import's imported_name,
 // then find the corresponding symbol in the imported package's files.
-for _, f := range java_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -350,7 +356,7 @@ for _, f := range java_files {
 // --- (d) Method resolution (qualified calls) ---
 // For "call" references that weren't resolved, try matching against methods
 // of classes in the same package or imported classes.
-for _, f := range java_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   pkg_name := file_package_map[fid_str]
@@ -468,6 +474,7 @@ for _, sym := range all_interfaces {
 // We use a heuristic: type_annotation refs within the class header (first few lines)
 // that match known class/interface names indicate inheritance.
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   cls_fid := cls["file_id"]
   cls_fid_str := string(cls_fid)
@@ -523,7 +530,7 @@ for _, cls := range all_classes {
 
 // --- (f) Call graph edge creation ---
 // For each resolved reference with context="call", create a call_graph edge.
-for _, f := range java_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -595,6 +602,7 @@ for _, meth := range all_methods {
   // Only process Java methods (check that the file is a Java file)
   meth_fid := meth["file_id"]
   meth_fid_str := string(meth_fid)
+  if "file_id" in meth && !(string(meth["file_id"]) in resolve_fid_set) { continue }
   is_java := false
   for _, f := range java_files {
     if f["id"] == meth_fid {

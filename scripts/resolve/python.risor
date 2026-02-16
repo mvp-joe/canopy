@@ -210,9 +210,15 @@ for _, f := range py_files {
 // Track resolved references
 resolved_set := {}
 
+resolve_files := files_to_resolve("python")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
 // Walk scope chain for each reference, matching against symbols in scope.
-for _, f := range py_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -272,7 +278,7 @@ for _, f := range py_files {
 // --- (b) Cross-file import resolution ---
 // For unresolved references that match an import name, find the target symbol
 // in the source module's files.
-for _, f := range py_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -366,7 +372,7 @@ for _, f := range py_files {
 // Strategy: look for methods in all classes in the same file and across files.
 class_methods_cache := {}
 
-for _, f := range py_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -463,6 +469,7 @@ for _, f := range py_files {
 // For each class with base_class type_members, create implementation records.
 all_classes := symbols_by_kind("class")
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   members := type_members(cls_id)
   for _, mem := range members {
@@ -494,7 +501,7 @@ for _, cls := range all_classes {
 
 // --- (e) Call graph edge creation ---
 // For each resolved call reference, create caller -> callee edges.
-for _, f := range py_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -553,7 +560,7 @@ for _, f := range py_files {
 // --- (f) Decorator resolution ---
 // Decorators are stored as annotations. Resolve annotation names to symbols.
 // Also resolve type_annotation references to base classes.
-for _, f := range py_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   file_syms := file_symbols_map[fid_str]

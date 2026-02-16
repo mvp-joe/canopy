@@ -127,8 +127,14 @@ for _, f := range cpp_files {
 // Track resolved references
 resolved_set := {}
 
+resolve_files := files_to_resolve("cpp")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -187,7 +193,7 @@ for _, f := range cpp_files {
 }
 
 // --- (b) Include-based cross-file resolution ---
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -248,7 +254,7 @@ for _, f := range cpp_files {
 // --- (c) Namespace-qualified name resolution ---
 // For references matching an imported symbol (via "using" declarations),
 // resolve against symbols with that name across all files.
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -304,7 +310,7 @@ for _, f := range cpp_files {
 
 // --- (d) Method and field access resolution ---
 // For call/field_access references, try to match against class/struct methods and fields.
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -377,7 +383,7 @@ for _, f := range cpp_files {
 }
 
 // --- (e) Cross-file resolution (fallback for remaining unresolved) ---
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -420,6 +426,7 @@ for _, f := range cpp_files {
 // For each class with "embedded" type_members (base classes), create implementation records.
 all_classes := symbols_by_kind("class")
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   members := type_members(cls_id)
 
@@ -457,6 +464,7 @@ for _, cls := range all_classes {
 // has methods that override base class virtual methods. Insert extension
 // bindings for virtual overrides.
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   cls_members := type_members(cls_id)
 
@@ -517,7 +525,7 @@ for _, cls := range all_classes {
 }
 
 // --- (h) Call graph edge creation ---
-for _, f := range cpp_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -575,6 +583,7 @@ for _, f := range cpp_files {
 // In C++, methods defined outside the class (Class::method) are extension bindings.
 all_methods := symbols_by_kind("method")
 for _, meth := range all_methods {
+  if "file_id" in meth && !(string(meth["file_id"]) in resolve_fid_set) { continue }
   parent_id := nil
   if "parent_symbol_id" in meth {
     parent_id = meth["parent_symbol_id"]

@@ -192,8 +192,14 @@ for _, f := range rb_files {
 // Track resolved references
 resolved_set := {}
 
+resolve_files := files_to_resolve("ruby")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range rb_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -253,7 +259,7 @@ for _, f := range rb_files {
 // --- (b) Cross-file require resolution ---
 // For unresolved references, check if the file has a require that matches
 // a known file basename, then look for the symbol in that file.
-for _, f := range rb_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -313,7 +319,7 @@ for _, f := range rb_files {
 // --- (c) Cross-file name-based resolution ---
 // For still-unresolved type_annotation/call references, try matching by name
 // across all Ruby files.
-for _, f := range rb_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -351,7 +357,7 @@ for _, f := range rb_files {
 // methods of classes/modules (handling obj.method pattern).
 class_methods_cache := {}
 
-for _, f := range rb_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -457,6 +463,7 @@ for _, f := range rb_files {
 // (superclass references emitted by extraction).
 all_classes := symbols_by_kind("class")
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   cls_file_id := nil
   if "file_id" in cls {
@@ -505,6 +512,7 @@ for _, mod := range all_modules {
 }
 
 for _, sym := range all_syms_for_mixins {
+  if "file_id" in sym && !(string(sym["file_id"]) in resolve_fid_set) { continue }
   sym_id := sym["id"]
   sym_file_id := nil
   if "file_id" in sym {
@@ -535,7 +543,7 @@ for _, sym := range all_syms_for_mixins {
 }
 
 // --- (g) Call graph edge creation ---
-for _, f := range rb_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)

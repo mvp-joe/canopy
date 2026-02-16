@@ -718,6 +718,43 @@ func makeFilesByLanguageFn(s *store.Store) *object.Builtin {
 	})
 }
 
+// MakeFilesToResolveFn creates a files_to_resolve function that filters
+// FilesByLanguage results to only files in the blast radius. When
+// blastFileIDs is nil, returns all files (full resolve). Exported so
+// engine.go can pass it as an extra global without importing object.
+func MakeFilesToResolveFn(s *store.Store, blastFileIDs map[int64]bool) any {
+	return object.NewBuiltin("files_to_resolve", func(ctx context.Context, args ...object.Object) object.Object {
+		if len(args) != 1 {
+			return object.NewArgsError("files_to_resolve", 1, len(args))
+		}
+		lang, err := toString(args[0])
+		if err != nil {
+			return object.Errorf("files_to_resolve: %v", err)
+		}
+
+		files, queryErr := s.FilesByLanguage(lang)
+		if queryErr != nil {
+			return object.Errorf("files_to_resolve: %v", queryErr)
+		}
+
+		var results []object.Object
+		for _, f := range files {
+			if blastFileIDs != nil && !blastFileIDs[f.ID] {
+				continue
+			}
+			results = append(results, object.NewMap(map[string]object.Object{
+				"id":       object.NewInt(f.ID),
+				"path":     object.NewString(f.Path),
+				"language": object.NewString(f.Language),
+			}))
+		}
+		if results == nil {
+			results = []object.Object{}
+		}
+		return object.NewList(results)
+	})
+}
+
 func makeSymbolsByKindFn(s *store.Store) *object.Builtin {
 	return object.NewBuiltin("symbols_by_kind", func(ctx context.Context, args ...object.Object) object.Object {
 		if len(args) != 1 {

@@ -206,8 +206,14 @@ for _, f := range php_files {
 // Track resolved references
 resolved_set := {}
 
+resolve_files := files_to_resolve("php")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range php_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -270,7 +276,7 @@ for _, f := range php_files {
 // --- (b) Cross-file use/namespace resolution ---
 // For unresolved references that match an import alias (use statement),
 // find the target symbol in other PHP files.
-for _, f := range php_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -309,7 +315,7 @@ for _, f := range php_files {
 
 // --- (c) Cross-file name-based resolution (same name, no import needed) ---
 // For still-unresolved references, try matching by name across all PHP files.
-for _, f := range php_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -348,7 +354,7 @@ for _, f := range php_files {
 // methods of classes in the codebase (handling $obj->method() pattern).
 class_methods_cache := {}
 
-for _, f := range php_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -436,6 +442,7 @@ for _, f := range php_files {
 // that appear in the class declaration range.
 all_classes := symbols_by_kind("class")
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   cls_file_id := nil
   if "file_id" in cls {
@@ -484,6 +491,7 @@ for _, cls := range all_classes {
 // For each class/trait that has "embedded" type_members (trait use), create
 // implementation records linking the class to the trait.
 for _, cls := range all_classes {
+  if "file_id" in cls && !(string(cls["file_id"]) in resolve_fid_set) { continue }
   cls_id := cls["id"]
   cls_file_id := nil
   if "file_id" in cls {
@@ -514,7 +522,7 @@ for _, cls := range all_classes {
 }
 
 // --- (g) Call graph edge creation ---
-for _, f := range php_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)

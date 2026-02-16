@@ -136,8 +136,14 @@ for _, f := range rust_files {
 // Track which references have been resolved
 resolved_set := {}
 
+resolve_files := files_to_resolve("rust")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range rust_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -199,7 +205,7 @@ for _, f := range rust_files {
 // --- (b) Use/import resolution ---
 // For references matching an imported name, resolve to symbols that match
 // the imported name across all files.
-for _, f := range rust_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -249,7 +255,7 @@ for _, f := range rust_files {
 // --- (c) Method resolution ---
 // For "call" context references that weren't resolved above, try to match
 // against methods of types in all Rust files.
-for _, f := range rust_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -355,6 +361,7 @@ for _, trait := range all_traits {
   }
 
   for _, typ := range all_types {
+    if "file_id" in typ && !(string(typ["file_id"]) in resolve_fid_set) { continue }
     type_id := typ["id"]
 
     // Get all methods on this type (methods with parent_symbol_id == type_id)
@@ -396,7 +403,7 @@ for _, trait := range all_traits {
 }
 
 // --- (e) Call graph edge creation ---
-for _, f := range rust_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -456,6 +463,7 @@ for _, f := range rust_files {
 // In Rust, methods defined in `impl Type { ... }` blocks are extension bindings.
 all_methods := symbols_by_kind("method")
 for _, meth := range all_methods {
+  if "file_id" in meth && !(string(meth["file_id"]) in resolve_fid_set) { continue }
   parent_id := nil
   if "parent_symbol_id" in meth {
     parent_id = meth["parent_symbol_id"]

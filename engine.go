@@ -174,6 +174,11 @@ func (e *Engine) captureSymbols(fileID int64) ([]capturedSymbol, error) {
 //
 // Errors on individual files are logged and skipped; processing continues.
 func (e *Engine) IndexFiles(ctx context.Context, paths []string) error {
+	// Initialize blast radius so Resolve() can distinguish "no changes"
+	// (non-nil empty map) from "first run" (nil).
+	if e.blastRadius == nil {
+		e.blastRadius = make(map[int64]bool)
+	}
 	var errs []error
 	for _, path := range paths {
 		if err := e.indexFile(ctx, path); err != nil {
@@ -444,41 +449,65 @@ func (e *Engine) walkListFiles(root string) ([]string, error) {
 
 // Resolve runs resolution scripts for all languages that have indexed files.
 // Resolution scripts are not incremental — they process all files for a language.
-// To avoid duplicates, all existing resolution data for each language is deleted
-// before running its script. The blast radius (from IndexFiles) determines which
-// languages need re-resolution; if nil, all languages are resolved.
+// Resolve runs language-specific resolution scripts against extraction data.
+//
+// Resolution scripts receive a files_to_resolve function that returns only
+// the files needing resolution, while files_by_language continues to return
+// all files (needed for cross-file lookup caches).
 func (e *Engine) Resolve(ctx context.Context) error {
-	// Reset blast radius after using it.
 	defer func() { e.blastRadius = nil }()
+
+	// Non-nil empty blast radius means no files changed — skip resolution.
+	if e.blastRadius != nil && len(e.blastRadius) == 0 {
+		return nil
+	}
 
 	langs, err := e.distinctLanguages()
 	if err != nil {
 		return fmt.Errorf("list languages: %w", err)
 	}
 
-	var errs []error
-	for _, lang := range langs {
-		// Delete ALL resolution data for this language's files before re-running.
-		// The resolution script processes all files, so partial deletion would
-		// cause duplicates for files outside the blast radius.
-		langFiles, err := e.store.FilesByLanguage(lang)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("list files for %s: %w", lang, err))
-			continue
+	// Delete resolution data for affected files before re-running scripts.
+	if e.blastRadius != nil {
+		// Incremental: only delete resolution data for blast radius files.
+		var blastIDs []int64
+		for fid := range e.blastRadius {
+			blastIDs = append(blastIDs, fid)
 		}
-		var langFileIDs []int64
-		for _, f := range langFiles {
-			langFileIDs = append(langFileIDs, f.ID)
-		}
-		if len(langFileIDs) > 0 {
-			if err := e.store.DeleteResolutionDataForFiles(langFileIDs); err != nil {
-				errs = append(errs, fmt.Errorf("delete resolution data for %s: %w", lang, err))
-				continue
+		if len(blastIDs) > 0 {
+			if err := e.store.DeleteResolutionDataForFiles(blastIDs); err != nil {
+				return fmt.Errorf("delete resolution data: %w", err)
 			}
 		}
+	} else {
+		// Full resolve: delete all resolution data for every language.
+		for _, lang := range langs {
+			langFiles, err := e.store.FilesByLanguage(lang)
+			if err != nil {
+				return fmt.Errorf("list files for %s: %w", lang, err)
+			}
+			var langFileIDs []int64
+			for _, f := range langFiles {
+				langFileIDs = append(langFileIDs, f.ID)
+			}
+			if len(langFileIDs) > 0 {
+				if err := e.store.DeleteResolutionDataForFiles(langFileIDs); err != nil {
+					return fmt.Errorf("delete resolution data for %s: %w", lang, err)
+				}
+			}
+		}
+	}
 
+	// Pass files_to_resolve as an extra global. It filters FilesByLanguage
+	// to only files in the blast radius (or returns all files on full resolve).
+	extras := map[string]any{
+		"files_to_resolve": runtime.MakeFilesToResolveFn(e.store, e.blastRadius),
+	}
+
+	var errs []error
+	for _, lang := range langs {
 		scriptPath := runtime.ResolutionScriptPath(lang)
-		if err := e.runtime.RunScript(ctx, scriptPath, nil); err != nil {
+		if err := e.runtime.RunScript(ctx, scriptPath, extras); err != nil {
 			errs = append(errs, fmt.Errorf("resolution script for %s: %w", lang, err))
 		}
 	}

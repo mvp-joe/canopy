@@ -128,8 +128,14 @@ for _, f := range c_files {
 // Track which references have been resolved (ref_id_str → true)
 resolved_set := {}
 
+resolve_files := files_to_resolve("c")
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range c_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -192,7 +198,7 @@ for _, f := range c_files {
 // For unresolved references, check if the file includes headers that
 // match basenames of other C files in the store. Resolve against symbols
 // in those included files.
-for _, f := range c_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -253,7 +259,7 @@ for _, f := range c_files {
 
 // --- (c) Struct field access resolution ---
 // For field_access references, try matching against struct fields (type_members).
-for _, f := range c_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -303,7 +309,7 @@ for _, f := range c_files {
 
 // --- (d) Cross-file resolution (fallback for remaining unresolved) ---
 // For references still unresolved, try matching against symbols in all C files.
-for _, f := range c_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -343,7 +349,7 @@ for _, f := range c_files {
 }
 
 // --- (e) Call graph edge creation ---
-for _, f := range c_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)

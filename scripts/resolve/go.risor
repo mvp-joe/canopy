@@ -193,11 +193,21 @@ for _, f := range go_files {
   file_import_alias_map[fid_str] = alias_map
 }
 
+// Determine which files need resolution data written.
+// files_to_resolve returns blast-radius files (or all files on first run).
+resolve_files := files_to_resolve("go")
+
+// Build a set of resolve file IDs for filtering global phases.
+resolve_fid_set := {}
+for _, f := range resolve_files {
+  resolve_fid_set[string(f["id"])] = true
+}
+
 // Track which references have been resolved (ref_id → true)
 resolved_set := {}
 
 // --- (a) Single-file scope-based name resolution ---
-for _, f := range go_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -267,7 +277,7 @@ for _, f := range go_files {
 }
 
 // --- (b) Cross-file same-package resolution ---
-for _, f := range go_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   pkg_name := file_package_map[fid_str]
@@ -324,7 +334,7 @@ for _, f := range go_files {
 //   - The field "Println" is a "field_access" context reference
 // We need to find "field_access" refs that follow an import-matched operand.
 
-for _, f := range go_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -394,7 +404,7 @@ for _, f := range go_files {
 // --- (d) Method resolution (receiver type matching) ---
 // For field_access references that weren't resolved above (not import-qualified),
 // try to match against methods of types in the same package.
-for _, f := range go_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   pkg_name := file_package_map[fid_str]
@@ -493,6 +503,8 @@ for _, iface := range all_interfaces {
   }
 
   for _, st := range all_structs {
+    st_fid := string(st["file_id"])
+    if !(st_fid in resolve_fid_set) { continue }
     st_id := st["id"]
 
     // Get all methods on this struct (methods with parent_symbol_id == st_id)
@@ -536,7 +548,7 @@ for _, iface := range all_interfaces {
 
 // --- (f) Call graph edge creation ---
 // For each resolved reference with context="call", create a call_graph edge.
-for _, f := range go_files {
+for _, f := range resolve_files {
   fid := f["id"]
   fid_str := string(fid)
   refs := references_by_file(fid)
@@ -597,6 +609,8 @@ for _, f := range go_files {
 // In Go, methods defined on types via receivers are extension bindings.
 all_methods := symbols_by_kind("method")
 for _, meth := range all_methods {
+  meth_fid := string(meth["file_id"])
+  if !(meth_fid in resolve_fid_set) { continue }
   parent_id := nil
   if "parent_symbol_id" in meth {
     parent_id = meth["parent_symbol_id"]
