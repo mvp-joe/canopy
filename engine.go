@@ -259,10 +259,12 @@ func (e *Engine) indexFile(ctx context.Context, path string) error {
 	}
 
 	// Step 3: Insert new file record and run extraction.
+	lineCount := bytes.Count(content, []byte{'\n'}) + 1
 	fileID, err := e.store.InsertFile(&store.File{
 		Path:        path,
 		Language:    lang,
 		Hash:        hash,
+		LineCount:   lineCount,
 		LastIndexed: time.Now(),
 	})
 	if err != nil {

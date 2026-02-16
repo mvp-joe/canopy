@@ -1,6 +1,7 @@
 package canopy
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -165,10 +166,12 @@ func (e *Engine) prepareFile(_ context.Context, path string) (workItem, bool, er
 	}
 
 	// Insert new file record (real ID assigned by SQLite).
+	lineCount := bytes.Count(content, []byte{'\n'}) + 1
 	fileID, err := e.store.InsertFile(&store.File{
 		Path:        path,
 		Language:    lang,
 		Hash:        hash,
+		LineCount:   lineCount,
 		LastIndexed: time.Now(),
 	})
 	if err != nil {

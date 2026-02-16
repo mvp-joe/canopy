@@ -41,6 +41,8 @@ func (s *Store) Migrate() error {
 	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	// Idempotent column additions for existing databases.
+	s.db.Exec("ALTER TABLE files ADD COLUMN line_count INTEGER")
 	return nil
 }
 
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS files (
   path            TEXT NOT NULL UNIQUE,
   language        TEXT NOT NULL,
   hash            TEXT,
+  line_count      INTEGER,
   last_indexed    TIMESTAMP
 );
 

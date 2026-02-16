@@ -9,8 +9,8 @@ import (
 
 func (s *Store) InsertFile(f *File) (int64, error) {
 	res, err := s.db.Exec(
-		"INSERT INTO files (path, language, hash, last_indexed) VALUES (?, ?, ?, ?)",
-		f.Path, f.Language, f.Hash, f.LastIndexed,
+		"INSERT INTO files (path, language, hash, line_count, last_indexed) VALUES (?, ?, ?, ?, ?)",
+		f.Path, f.Language, f.Hash, f.LineCount, f.LastIndexed,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert file: %w", err)
@@ -26,8 +26,8 @@ func (s *Store) InsertFile(f *File) (int64, error) {
 func (s *Store) FileByPath(path string) (*File, error) {
 	f := &File{}
 	err := s.db.QueryRow(
-		"SELECT id, path, language, hash, last_indexed FROM files WHERE path = ?", path,
-	).Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LastIndexed)
+		"SELECT id, path, language, hash, line_count, last_indexed FROM files WHERE path = ?", path,
+	).Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LineCount, &f.LastIndexed)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -39,7 +39,7 @@ func (s *Store) FileByPath(path string) (*File, error) {
 
 func (s *Store) FilesByLanguage(language string) ([]*File, error) {
 	rows, err := s.db.Query(
-		"SELECT id, path, language, hash, last_indexed FROM files WHERE language = ?", language,
+		"SELECT id, path, language, hash, line_count, last_indexed FROM files WHERE language = ?", language,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("files by language: %w", err)
@@ -48,7 +48,7 @@ func (s *Store) FilesByLanguage(language string) ([]*File, error) {
 	var files []*File
 	for rows.Next() {
 		f := &File{}
-		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LastIndexed); err != nil {
+		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LineCount, &f.LastIndexed); err != nil {
 			return nil, fmt.Errorf("scan file: %w", err)
 		}
 		files = append(files, f)

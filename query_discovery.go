@@ -42,6 +42,7 @@ const (
 	SortByName     SortField = "name"
 	SortByKind     SortField = "kind"
 	SortByFile     SortField = "file"
+	SortByLineCount        SortField = "line_count"
 	SortByRefCount         SortField = "ref_count"
 	SortByExternalRefCount SortField = "external_ref_count"
 )
@@ -124,6 +125,8 @@ func fileSortColumn(field SortField) string {
 	switch field {
 	case SortByFile, SortByName:
 		return "path"
+	case SortByLineCount:
+		return "line_count"
 	default:
 		return "path"
 	}
@@ -265,7 +268,7 @@ func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page
 	orderDir := sortDirection(sort.Order)
 
 	dataSQL := fmt.Sprintf(
-		`SELECT id, path, language, hash, last_indexed FROM files %s ORDER BY %s %s LIMIT ? OFFSET ?`,
+		`SELECT id, path, language, hash, line_count, last_indexed FROM files %s ORDER BY %s %s LIMIT ? OFFSET ?`,
 		whereClause, orderCol, orderDir,
 	)
 	dataArgs := append(append([]any{}, args...), page.Limit, page.Offset)
@@ -279,7 +282,7 @@ func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page
 	var items []store.File
 	for rows.Next() {
 		var f store.File
-		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LastIndexed); err != nil {
+		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LineCount, &f.LastIndexed); err != nil {
 			return nil, fmt.Errorf("files: scan: %w", err)
 		}
 		items = append(items, f)
@@ -414,6 +417,7 @@ func (q *QueryBuilder) SearchSymbols(pattern string, filter SymbolFilter, sort S
 type LanguageStats struct {
 	Language    string
 	FileCount   int
+	LineCount   int
 	SymbolCount int
 	KindCounts  map[string]int
 }
@@ -429,9 +433,9 @@ type ProjectSummary struct {
 func (q *QueryBuilder) ProjectSummary(topN int) (*ProjectSummary, error) {
 	summary := &ProjectSummary{}
 
-	// Language stats: file count per language
+	// Language stats: file count and line count per language
 	langRows, err := q.store.DB().Query(
-		`SELECT language, COUNT(*) FROM files GROUP BY language ORDER BY language`,
+		`SELECT language, COUNT(*), COALESCE(SUM(line_count), 0) FROM files GROUP BY language ORDER BY language`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("project summary: languages: %w", err)
@@ -441,7 +445,7 @@ func (q *QueryBuilder) ProjectSummary(topN int) (*ProjectSummary, error) {
 	var languages []LanguageStats
 	for langRows.Next() {
 		var ls LanguageStats
-		if err := langRows.Scan(&ls.Language, &ls.FileCount); err != nil {
+		if err := langRows.Scan(&ls.Language, &ls.FileCount, &ls.LineCount); err != nil {
 			return nil, fmt.Errorf("project summary: scan language: %w", err)
 		}
 		languages = append(languages, ls)

@@ -58,15 +58,17 @@ type CLIImport struct {
 
 // CLIFile is a JSON-friendly file representation.
 type CLIFile struct {
-	ID       int64  `json:"id"`
-	Path     string `json:"path"`
-	Language string `json:"language"`
+	ID        int64  `json:"id"`
+	Path      string `json:"path"`
+	Language  string `json:"language"`
+	LineCount int    `json:"line_count"`
 }
 
 // CLILanguageStats is a JSON-friendly language stats representation.
 type CLILanguageStats struct {
 	Language    string         `json:"language"`
 	FileCount   int            `json:"file_count"`
+	LineCount   int            `json:"line_count"`
 	SymbolCount int            `json:"symbol_count"`
 	KindCounts  map[string]int `json:"kind_counts"`
 }

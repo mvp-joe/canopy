@@ -9,6 +9,7 @@ type File struct {
 	Path        string
 	Language    string
 	Hash        string
+	LineCount   int
 	LastIndexed time.Time
 }
 

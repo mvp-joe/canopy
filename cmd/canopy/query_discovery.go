@@ -142,9 +142,10 @@ func runFiles(cmd *cobra.Command, args []string) error {
 	cliFiles := make([]CLIFile, len(result.Items))
 	for i, f := range result.Items {
 		cliFiles[i] = CLIFile{
-			ID:       f.ID,
-			Path:     f.Path,
-			Language: f.Language,
+			ID:        f.ID,
+			Path:      f.Path,
+			Language:  f.Language,
+			LineCount: f.LineCount,
 		}
 	}
 
@@ -221,6 +222,7 @@ func runSummary(cmd *cobra.Command, args []string) error {
 		cliSummary.Languages[i] = CLILanguageStats{
 			Language:    ls.Language,
 			FileCount:   ls.FileCount,
+			LineCount:   ls.LineCount,
 			SymbolCount: ls.SymbolCount,
 			KindCounts:  ls.KindCounts,
 		}
