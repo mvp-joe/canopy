@@ -89,6 +89,36 @@ for _, f := range go_files {
   file_sym_by_id[fid_str] = id_map
 }
 
+// --- Build map of function-local variable symbol IDs per file ---
+file_local_sym_ids := {}
+for _, f := range go_files {
+  fid := f["id"]
+  fid_str := string(fid)
+  scopes := file_scopes_map[fid_str]
+  syms := file_symbols_map[fid_str]
+
+  func_scopes := []
+  for _, sc := range scopes {
+    if sc["kind"] == "function" {
+      func_scopes = func_scopes.append(sc)
+    }
+  }
+
+  local_ids := {}
+  for _, sym := range syms {
+    if sym["kind"] == "variable" {
+      sym_line := sym["start_line"]
+      for _, fsc := range func_scopes {
+        if sym_line >= fsc["start_line"] && sym_line <= fsc["end_line"] {
+          local_ids[string(sym["id"])] = true
+          break
+        }
+      }
+    }
+  }
+  file_local_sym_ids[fid_str] = local_ids
+}
+
 // --- Build import alias → source mapping per file ---
 // file_id_str → { alias → import_map }
 file_import_alias_map := {}
@@ -237,8 +267,10 @@ for _, f := range resolve_files {
       if !(ref_name in other_name_map) {
         continue
       }
+      other_local_ids := file_local_sym_ids[other_fid_str]
       for _, sym := range other_name_map[ref_name] {
-        if sym["kind"] != "package" {
+        sym_id_str := string(sym["id"])
+        if sym["kind"] != "package" && !(sym_id_str in other_local_ids) {
           insert_resolved_reference({
             reference_id: ref_id,
             target_symbol_id: sym["id"],

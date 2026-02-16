@@ -1,0 +1,19 @@
+{
+  "definitions": [
+    { "name": "demo", "kind": "package", "file": "a_worker.go", "line": 0 },
+    { "name": "StartWorker", "kind": "function", "file": "a_worker.go", "line": 2 },
+    { "name": "cfg", "kind": "variable", "file": "a_worker.go", "line": 3 },
+    { "name": "loadWorker", "kind": "function", "file": "a_worker.go", "line": 7 },
+    { "name": "demo", "kind": "package", "file": "b_config.go", "line": 0 },
+    { "name": "cfg", "kind": "function", "file": "b_config.go", "line": 2 },
+    { "name": "demo", "kind": "package", "file": "c_main.go", "line": 0 },
+    { "name": "Main", "kind": "function", "file": "c_main.go", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "cfg() in Main should resolve to the package-level function cfg in b_config.go, NOT the local variable cfg in a_worker.go",
+      "from": { "file": "c_main.go", "line": 3, "col": 8 },
+      "to": { "name": "cfg", "file": "b_config.go", "line": 2 }
+    }
+  ]
+}

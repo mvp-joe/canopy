@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "demo", "kind": "package", "file": "handlers.go", "line": 0 },
+    { "name": "Response", "kind": "struct", "file": "handlers.go", "line": 2 },
+    { "name": "String", "kind": "method", "file": "handlers.go", "line": 6 },
+    { "name": "HandleA", "kind": "function", "file": "handlers.go", "line": 10 },
+    { "name": "r", "kind": "variable", "file": "handlers.go", "line": 11 },
+    { "name": "HandleB", "kind": "function", "file": "handlers.go", "line": 15 },
+    { "name": "r", "kind": "variable", "file": "handlers.go", "line": 16 }
+  ],
+  "references": [
+    {
+      "_comment": "r.String() in HandleA should resolve to HandleA's r (line 11)",
+      "from": { "file": "handlers.go", "line": 12, "col": 8 },
+      "to": { "name": "r", "file": "handlers.go", "line": 11 }
+    },
+    {
+      "_comment": "r.String() in HandleB should resolve to HandleB's r (line 16), NOT HandleA's r (line 11)",
+      "from": { "file": "handlers.go", "line": 17, "col": 8 },
+      "to": { "name": "r", "file": "handlers.go", "line": 16 }
+    }
+  ]
+}
