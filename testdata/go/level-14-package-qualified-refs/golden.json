@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "mathutil", "kind": "package", "file": "math.go", "line": 0 },
+    { "name": "Add", "kind": "function", "file": "math.go", "line": 2 },
+    { "name": "Multiply", "kind": "function", "file": "math.go", "line": 6 },
+    { "name": "main", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "Calculate", "kind": "function", "file": "main.go", "line": 4 },
+    { "name": "sum", "kind": "variable", "file": "main.go", "line": 5 },
+    { "name": "product", "kind": "variable", "file": "main.go", "line": 6 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 5, "col": 17 },
+      "to": { "name": "Add", "file": "math.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 6, "col": 21 },
+      "to": { "name": "Multiply", "file": "math.go", "line": 6 }
+    }
+  ],
+  "calls": [
+    { "caller": "Calculate", "callee": "Add" },
+    { "caller": "Calculate", "callee": "Multiply" }
+  ]
+}

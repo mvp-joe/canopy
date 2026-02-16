@@ -1,0 +1,26 @@
+{
+  "definitions": [
+    { "name": "com.util", "kind": "package", "file": "MathUtil.java", "line": 0 },
+    { "name": "MathUtil", "kind": "class", "file": "MathUtil.java", "line": 2 },
+    { "name": "square", "kind": "method", "file": "MathUtil.java", "line": 3 },
+    { "name": "cube", "kind": "method", "file": "MathUtil.java", "line": 7 },
+    { "name": "com.app", "kind": "package", "file": "App.java", "line": 0 },
+    { "name": "App", "kind": "class", "file": "App.java", "line": 4 },
+    { "name": "run", "kind": "method", "file": "App.java", "line": 7 }
+  ],
+  "references": [
+    {
+      "_comment": "MathUtil type reference in field resolves via import",
+      "from": { "file": "App.java", "line": 5, "col": 12 },
+      "to": { "name": "MathUtil", "file": "MathUtil.java", "line": 2 }
+    },
+    {
+      "_comment": "MathUtil type reference in local var resolves via import",
+      "from": { "file": "App.java", "line": 8, "col": 8 },
+      "to": { "name": "MathUtil", "file": "MathUtil.java", "line": 2 }
+    }
+  ],
+  "calls": [
+    { "caller": "cube", "callee": "square" }
+  ]
+}

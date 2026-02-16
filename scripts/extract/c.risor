@@ -105,6 +105,14 @@ func extract_declarator_name(decl_node) {
     if inner != nil {
       return extract_declarator_name(inner)
     }
+    // parenthesized_declarator may not have a named "declarator" field;
+    // fall back to the first named child.
+    if t == "parenthesized_declarator" {
+      count := int(decl_node.NamedChildCount())
+      if count > 0 {
+        return extract_declarator_name(decl_node.NamedChild(0))
+      }
+    }
   }
   if t == "function_declarator" {
     inner := node_child(decl_node, "declarator")
@@ -347,9 +355,12 @@ for _, m := range enum_matches {
   symbol_ids[name] = sym_id
 
   // Extract enumerators as type_members with kind="variant"
+  // Also insert each enumerator as a top-level constant symbol so that
+  // references to enum values (e.g. STATUS_OK) can be resolved by name.
   enumerator_matches := query("(enumerator name: (identifier) @name) @en", body_node)
   for _, em := range enumerator_matches {
     en_name := node_text(em["name"])
+    en_node := em["en"]
     insert_type_member({
       symbol_id: sym_id,
       name: en_name,
@@ -357,6 +368,17 @@ for _, m := range enum_matches {
       type_expr: "",
       visibility: "public",
     })
+    en_sym_id := insert_symbol({
+      file_id: file_id,
+      name: en_name,
+      kind: "constant",
+      visibility: "public",
+      start_line: start_line(en_node),
+      start_col: start_col(en_node),
+      end_line: end_line(en_node),
+      end_col: end_col(en_node),
+    })
+    symbol_ids[en_name] = en_sym_id
   }
 }
 

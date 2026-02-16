@@ -1,0 +1,24 @@
+{
+  "definitions": [
+    { "name": "Service", "kind": "class", "file": "service.php", "line": 2 },
+    { "name": "hello", "kind": "method", "file": "service.php", "line": 3 },
+    { "name": "greet", "kind": "method", "file": "service.php", "line": 7 },
+    { "name": "run", "kind": "method", "file": "service.php", "line": 11 }
+  ],
+  "references": [
+    {
+      "_comment": "$this->hello() in greet()",
+      "from": { "file": "service.php", "line": 8, "col": 22 },
+      "to": { "name": "hello", "file": "service.php", "line": 3 }
+    },
+    {
+      "_comment": "$this->greet() in run()",
+      "from": { "file": "service.php", "line": 12, "col": 20 },
+      "to": { "name": "greet", "file": "service.php", "line": 7 }
+    }
+  ],
+  "calls": [
+    { "caller": "greet", "callee": "hello" },
+    { "caller": "run", "callee": "greet" }
+  ]
+}

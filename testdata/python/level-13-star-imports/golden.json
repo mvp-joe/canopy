@@ -1,0 +1,24 @@
+{
+  "definitions": [
+    { "name": "circle_area", "kind": "function", "file": "shapes.py", "line": 0 },
+    { "name": "square_area", "kind": "function", "file": "shapes.py", "line": 4 },
+    { "name": "_internal_helper", "kind": "function", "file": "shapes.py", "line": 8 },
+    { "name": "compute", "kind": "function", "file": "main.py", "line": 3 }
+  ],
+  "references": [
+    {
+      "_comment": "circle_area() via wildcard import resolves to shapes.py",
+      "from": { "file": "main.py", "line": 4, "col": 8 },
+      "to": { "name": "circle_area", "file": "shapes.py", "line": 0 }
+    },
+    {
+      "_comment": "square_area() via wildcard import resolves to shapes.py",
+      "from": { "file": "main.py", "line": 5, "col": 8 },
+      "to": { "name": "square_area", "file": "shapes.py", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "compute", "callee": "circle_area" },
+    { "caller": "compute", "callee": "square_area" }
+  ]
+}

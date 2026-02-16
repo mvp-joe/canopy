@@ -1,0 +1,14 @@
+{
+  "definitions": [
+    { "name": "Logger", "kind": "class", "file": "calls.cpp", "line": 0 },
+    { "name": "greet", "kind": "function", "file": "calls.cpp", "line": 6 },
+    { "name": "process", "kind": "function", "file": "calls.cpp", "line": 8 },
+    { "name": "main", "kind": "function", "file": "calls.cpp", "line": 14 }
+  ],
+  "calls": [
+    { "caller": "process", "callee": "greet" },
+    { "caller": "process", "callee": "info" },
+    { "caller": "process", "callee": "warn" },
+    { "caller": "main", "callee": "process" }
+  ]
+}

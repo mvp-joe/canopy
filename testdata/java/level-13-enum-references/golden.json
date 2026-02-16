@@ -1,0 +1,17 @@
+{
+  "definitions": [
+    { "name": "nav", "kind": "package", "file": "Direction.java", "line": 0 },
+    { "name": "Direction", "kind": "enum", "file": "Direction.java", "line": 2 },
+    { "name": "opposite", "kind": "method", "file": "Direction.java", "line": 5 },
+    { "name": "isVertical", "kind": "method", "file": "Direction.java", "line": 14 },
+    { "name": "nav", "kind": "package", "file": "Navigator.java", "line": 0 },
+    { "name": "Navigator", "kind": "class", "file": "Navigator.java", "line": 2 },
+    { "name": "Navigator", "kind": "constructor", "file": "Navigator.java", "line": 5 },
+    { "name": "turnAround", "kind": "method", "file": "Navigator.java", "line": 9 },
+    { "name": "describe", "kind": "method", "file": "Navigator.java", "line": 13 }
+  ],
+  "calls": [
+    { "caller": "turnAround", "callee": "opposite" },
+    { "caller": "describe", "callee": "isVertical" }
+  ]
+}

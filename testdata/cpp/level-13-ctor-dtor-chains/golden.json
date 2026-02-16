@@ -1,0 +1,16 @@
+{
+  "definitions": [
+    { "name": "Resource", "kind": "class", "file": "resource.cpp", "line": 0 },
+    { "name": "File", "kind": "class", "file": "resource.cpp", "line": 8 },
+    { "name": "process", "kind": "function", "file": "resource.cpp", "line": 21 }
+  ],
+  "implementations": [
+    { "type": "File", "interface": "Resource" }
+  ],
+  "calls": [
+    { "caller": "open", "callee": "init" },
+    { "caller": "close", "callee": "cleanup" },
+    { "caller": "process", "callee": "open" },
+    { "caller": "process", "callee": "close" }
+  ]
+}

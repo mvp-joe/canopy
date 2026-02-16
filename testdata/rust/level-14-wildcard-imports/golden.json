@@ -1,0 +1,32 @@
+{
+  "definitions": [
+    { "name": "greet", "kind": "function", "file": "prelude.rs", "line": 0 },
+    { "name": "Logger", "kind": "struct", "file": "logger.rs", "line": 0 },
+    { "name": "new", "kind": "function", "file": "logger.rs", "line": 5 },
+    { "name": "log", "kind": "method", "file": "logger.rs", "line": 9 },
+    { "name": "run", "kind": "function", "file": "main.rs", "line": 3 },
+    { "name": "main", "kind": "function", "file": "main.rs", "line": 10 }
+  ],
+  "references": [
+    {
+      "_comment": "Logger return type resolves to Logger struct via explicit import",
+      "from": { "file": "main.rs", "line": 3, "col": 12 },
+      "to": { "name": "Logger", "file": "logger.rs", "line": 0 }
+    },
+    {
+      "_comment": "logger.log() method call resolves via method resolution",
+      "from": { "file": "main.rs", "line": 6, "col": 11 },
+      "to": { "name": "log", "file": "logger.rs", "line": 9 }
+    },
+    {
+      "_comment": "l.log() method call resolves via method resolution",
+      "from": { "file": "main.rs", "line": 12, "col": 6 },
+      "to": { "name": "log", "file": "logger.rs", "line": 9 }
+    }
+  ],
+  "calls": [
+    { "caller": "run", "callee": "log" },
+    { "caller": "main", "callee": "run" },
+    { "caller": "main", "callee": "log" }
+  ]
+}

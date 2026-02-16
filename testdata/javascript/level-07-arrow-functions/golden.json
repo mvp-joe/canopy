@@ -1,0 +1,38 @@
+{
+  "definitions": [
+    { "name": "double", "kind": "function", "file": "functional.js", "line": 0 },
+    { "name": "greet", "kind": "function", "file": "functional.js", "line": 2 },
+    { "name": "identity", "kind": "function", "file": "functional.js", "line": 6 },
+    { "name": "applyFn", "kind": "function", "file": "functional.js", "line": 8 },
+    { "name": "compose", "kind": "function", "file": "functional.js", "line": 12 },
+    { "name": "main", "kind": "function", "file": "functional.js", "line": 16 }
+  ],
+  "references": [
+    {
+      "_comment": "double(5) in main resolves to const double arrow fn",
+      "from": { "file": "functional.js", "line": 17, "col": 18 },
+      "to": { "name": "double", "file": "functional.js", "line": 0 }
+    },
+    {
+      "_comment": "greet('world') in main resolves to const greet arrow fn",
+      "from": { "file": "functional.js", "line": 18, "col": 18 },
+      "to": { "name": "greet", "file": "functional.js", "line": 2 }
+    },
+    {
+      "_comment": "applyFn(10, double) in main resolves to function applyFn",
+      "from": { "file": "functional.js", "line": 19, "col": 18 },
+      "to": { "name": "applyFn", "file": "functional.js", "line": 8 }
+    },
+    {
+      "_comment": "compose(double, double) in main resolves to function compose",
+      "from": { "file": "functional.js", "line": 20, "col": 20 },
+      "to": { "name": "compose", "file": "functional.js", "line": 12 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "double" },
+    { "caller": "main", "callee": "greet" },
+    { "caller": "main", "callee": "applyFn" },
+    { "caller": "main", "callee": "compose" }
+  ]
+}

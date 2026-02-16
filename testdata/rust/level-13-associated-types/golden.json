@@ -1,0 +1,22 @@
+{
+  "definitions": [
+    { "name": "Processor", "kind": "trait", "file": "generics.rs", "line": 0 },
+    { "name": "Upper", "kind": "struct", "file": "generics.rs", "line": 4 },
+    { "name": "process", "kind": "method", "file": "generics.rs", "line": 7 },
+    { "name": "Lower", "kind": "struct", "file": "generics.rs", "line": 12 },
+    { "name": "process", "kind": "method", "file": "generics.rs", "line": 15 },
+    { "name": "transform", "kind": "function", "file": "generics.rs", "line": 20 },
+    { "name": "transform_where", "kind": "function", "file": "generics.rs", "line": 24 },
+    { "name": "main", "kind": "function", "file": "generics.rs", "line": 31 }
+  ],
+  "implementations": [
+    { "type": "Upper", "interface": "Processor" },
+    { "type": "Lower", "interface": "Processor" }
+  ],
+  "calls": [
+    { "caller": "transform", "callee": "process" },
+    { "caller": "transform_where", "callee": "process" },
+    { "caller": "main", "callee": "transform" },
+    { "caller": "main", "callee": "transform_where" }
+  ]
+}

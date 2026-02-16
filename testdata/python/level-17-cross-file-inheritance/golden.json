@@ -1,0 +1,59 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "base.py", "line": 0 },
+    { "name": "area", "kind": "method", "file": "base.py", "line": 1 },
+    { "name": "describe", "kind": "method", "file": "base.py", "line": 4 },
+    { "name": "Circle", "kind": "class", "file": "shapes.py", "line": 3 },
+    { "name": "__init__", "kind": "method", "file": "shapes.py", "line": 4 },
+    { "name": "area", "kind": "method", "file": "shapes.py", "line": 7 },
+    { "name": "Square", "kind": "class", "file": "shapes.py", "line": 11 },
+    { "name": "__init__", "kind": "method", "file": "shapes.py", "line": 12 },
+    { "name": "area", "kind": "method", "file": "shapes.py", "line": 15 },
+    { "name": "report", "kind": "function", "file": "main.py", "line": 3 }
+  ],
+  "references": [
+    {
+      "_comment": "self.area() in describe resolves to Shape.area",
+      "from": { "file": "base.py", "line": 5, "col": 45 },
+      "to": { "name": "area", "file": "base.py", "line": 1 }
+    },
+    {
+      "_comment": "Circle(Shape) base class ref resolves to Shape",
+      "from": { "file": "shapes.py", "line": 3, "col": 13 },
+      "to": { "name": "Shape", "file": "base.py", "line": 0 }
+    },
+    {
+      "_comment": "Square(Shape) base class ref resolves to Shape",
+      "from": { "file": "shapes.py", "line": 11, "col": 13 },
+      "to": { "name": "Shape", "file": "base.py", "line": 0 }
+    },
+    {
+      "_comment": "Circle() call in report resolves to Circle class",
+      "from": { "file": "main.py", "line": 4, "col": 8 },
+      "to": { "name": "Circle", "file": "shapes.py", "line": 3 }
+    },
+    {
+      "_comment": "Square() call in report resolves to Square class",
+      "from": { "file": "main.py", "line": 5, "col": 8 },
+      "to": { "name": "Square", "file": "shapes.py", "line": 11 }
+    },
+    {
+      "_comment": "c.describe() resolves to Shape.describe",
+      "from": { "file": "main.py", "line": 6, "col": 13 },
+      "to": { "name": "describe", "file": "base.py", "line": 4 }
+    },
+    {
+      "_comment": "s.describe() resolves to Shape.describe",
+      "from": { "file": "main.py", "line": 6, "col": 27 },
+      "to": { "name": "describe", "file": "base.py", "line": 4 }
+    }
+  ],
+  "implementations": [
+    { "type": "Circle", "interface": "Shape" },
+    { "type": "Square", "interface": "Shape" }
+  ],
+  "calls": [
+    { "caller": "describe", "callee": "area" },
+    { "caller": "report", "callee": "describe" }
+  ]
+}

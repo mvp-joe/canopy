@@ -1,0 +1,49 @@
+{
+  "definitions": [
+    { "name": "dispatch", "kind": "package", "file": "types.go", "line": 0 },
+    { "name": "Counter", "kind": "struct", "file": "types.go", "line": 2 },
+    { "name": "Increment", "kind": "method", "file": "types.go", "line": 6 },
+    { "name": "Value", "kind": "method", "file": "types.go", "line": 10 },
+    { "name": "Logger", "kind": "struct", "file": "types.go", "line": 14 },
+    { "name": "Info", "kind": "method", "file": "types.go", "line": 18 },
+    { "name": "SetPrefix", "kind": "method", "file": "types.go", "line": 22 },
+    { "name": "dispatch", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "UseCounter", "kind": "function", "file": "main.go", "line": 2 },
+    { "name": "c", "kind": "variable", "file": "main.go", "line": 3 },
+    { "name": "v", "kind": "variable", "file": "main.go", "line": 5 },
+    { "name": "UseLogger", "kind": "function", "file": "main.go", "line": 10 },
+    { "name": "l", "kind": "variable", "file": "main.go", "line": 11 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 3, "col": 7 },
+      "to": { "name": "Counter", "file": "types.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 4, "col": 3 },
+      "to": { "name": "Increment", "file": "types.go", "line": 6 }
+    },
+    {
+      "from": { "file": "main.go", "line": 5, "col": 8 },
+      "to": { "name": "Value", "file": "types.go", "line": 10 }
+    },
+    {
+      "from": { "file": "main.go", "line": 11, "col": 7 },
+      "to": { "name": "Logger", "file": "types.go", "line": 14 }
+    },
+    {
+      "from": { "file": "main.go", "line": 12, "col": 3 },
+      "to": { "name": "SetPrefix", "file": "types.go", "line": 22 }
+    },
+    {
+      "from": { "file": "main.go", "line": 13, "col": 10 },
+      "to": { "name": "Info", "file": "types.go", "line": 18 }
+    }
+  ],
+  "calls": [
+    { "caller": "UseCounter", "callee": "Increment" },
+    { "caller": "UseCounter", "callee": "Value" },
+    { "caller": "UseLogger", "callee": "SetPrefix" },
+    { "caller": "UseLogger", "callee": "Info" }
+  ]
+}

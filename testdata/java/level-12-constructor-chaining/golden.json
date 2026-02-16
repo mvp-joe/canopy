@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "chain", "kind": "package", "file": "Base.java", "line": 0 },
+    { "name": "Base", "kind": "class", "file": "Base.java", "line": 2 },
+    { "name": "Base", "kind": "constructor", "file": "Base.java", "line": 5 },
+    { "name": "Base", "kind": "constructor", "file": "Base.java", "line": 9 },
+    { "name": "getLabel", "kind": "method", "file": "Base.java", "line": 13 },
+    { "name": "chain", "kind": "package", "file": "Child.java", "line": 0 },
+    { "name": "Child", "kind": "class", "file": "Child.java", "line": 2 },
+    { "name": "Child", "kind": "constructor", "file": "Child.java", "line": 5 },
+    { "name": "Child", "kind": "constructor", "file": "Child.java", "line": 10 },
+    { "name": "getValue", "kind": "method", "file": "Child.java", "line": 14 },
+    { "name": "chain", "kind": "package", "file": "App.java", "line": 0 },
+    { "name": "App", "kind": "class", "file": "App.java", "line": 2 },
+    { "name": "main", "kind": "method", "file": "App.java", "line": 3 }
+  ],
+  "implementations": [
+    { "type": "Child", "interface": "Base" }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "Child" },
+    { "caller": "main", "callee": "getLabel" },
+    { "caller": "main", "callee": "getValue" }
+  ]
+}

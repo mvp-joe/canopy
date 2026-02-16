@@ -1,0 +1,34 @@
+{
+  "definitions": [
+    { "name": "varret", "kind": "package", "file": "funcs.go", "line": 0 },
+    { "name": "Sum", "kind": "function", "file": "funcs.go", "line": 2 },
+    { "name": "Divide", "kind": "function", "file": "funcs.go", "line": 10 },
+    { "name": "Swap", "kind": "function", "file": "funcs.go", "line": 17 },
+    { "name": "varret", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "Process", "kind": "function", "file": "main.go", "line": 2 },
+    { "name": "total", "kind": "variable", "file": "main.go", "line": 3 },
+    { "name": "result", "kind": "variable", "file": "main.go", "line": 5 },
+    { "name": "err", "kind": "variable", "file": "main.go", "line": 5 },
+    { "name": "a", "kind": "variable", "file": "main.go", "line": 8 },
+    { "name": "b", "kind": "variable", "file": "main.go", "line": 8 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 3, "col": 10 },
+      "to": { "name": "Sum", "file": "funcs.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 5, "col": 16 },
+      "to": { "name": "Divide", "file": "funcs.go", "line": 10 }
+    },
+    {
+      "from": { "file": "main.go", "line": 8, "col": 9 },
+      "to": { "name": "Swap", "file": "funcs.go", "line": 17 }
+    }
+  ],
+  "calls": [
+    { "caller": "Process", "callee": "Sum" },
+    { "caller": "Process", "callee": "Divide" },
+    { "caller": "Process", "callee": "Swap" }
+  ]
+}

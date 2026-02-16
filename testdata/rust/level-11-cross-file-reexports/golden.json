@@ -1,0 +1,30 @@
+{
+  "definitions": [
+    { "name": "Config", "kind": "struct", "file": "types.rs", "line": 0 },
+    { "name": "default_name", "kind": "function", "file": "types.rs", "line": 4 },
+    { "name": "types", "kind": "module", "file": "lib.rs", "line": 0 },
+    { "name": "build", "kind": "function", "file": "main.rs", "line": 3 },
+    { "name": "main", "kind": "function", "file": "main.rs", "line": 8 }
+  ],
+  "references": [
+    {
+      "_comment": "Config return type in build() resolves to Config struct in types.rs",
+      "from": { "file": "main.rs", "line": 3, "col": 14 },
+      "to": { "name": "Config", "file": "types.rs", "line": 0 }
+    },
+    {
+      "_comment": "default_name() call in build() resolves to default_name in types.rs via import",
+      "from": { "file": "main.rs", "line": 4, "col": 15 },
+      "to": { "name": "default_name", "file": "types.rs", "line": 4 }
+    },
+    {
+      "_comment": "Config struct literal in build() resolves to Config struct in types.rs",
+      "from": { "file": "main.rs", "line": 5, "col": 4 },
+      "to": { "name": "Config", "file": "types.rs", "line": 0 }
+    }
+  ],
+  "calls": [
+    { "caller": "build", "callee": "default_name" },
+    { "caller": "main", "callee": "build" }
+  ]
+}

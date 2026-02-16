@@ -1,0 +1,41 @@
+{
+  "definitions": [
+    { "name": "Readable", "kind": "interface", "file": "interfaces.ts", "line": 0 },
+    { "name": "Writable", "kind": "interface", "file": "interfaces.ts", "line": 4 },
+    { "name": "ReadWrite", "kind": "interface", "file": "interfaces.ts", "line": 8 },
+    { "name": "FileStream", "kind": "class", "file": "stream.ts", "line": 2 },
+    { "name": "read", "kind": "method", "file": "stream.ts", "line": 3 },
+    { "name": "write", "kind": "method", "file": "stream.ts", "line": 7 },
+    { "name": "flush", "kind": "method", "file": "stream.ts", "line": 9 },
+    { "name": "process", "kind": "function", "file": "main.ts", "line": 2 },
+    { "name": "s", "kind": "constant", "file": "main.ts", "line": 3 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.ts", "line": 3, "col": 16 },
+      "to": { "name": "FileStream", "file": "stream.ts", "line": 2 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 4, "col": 4 },
+      "to": { "name": "read", "file": "stream.ts", "line": 3 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 5, "col": 4 },
+      "to": { "name": "write", "file": "stream.ts", "line": 7 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 6, "col": 4 },
+      "to": { "name": "flush", "file": "stream.ts", "line": 9 }
+    }
+  ],
+  "implementations": [
+    { "type": "FileStream", "interface": "Readable" },
+    { "type": "FileStream", "interface": "Writable" },
+    { "type": "FileStream", "interface": "ReadWrite" }
+  ],
+  "calls": [
+    { "caller": "process", "callee": "read" },
+    { "caller": "process", "callee": "write" },
+    { "caller": "process", "callee": "flush" }
+  ]
+}

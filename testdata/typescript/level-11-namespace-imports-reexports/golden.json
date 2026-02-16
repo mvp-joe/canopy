@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "add", "kind": "function", "file": "math.ts", "line": 0 },
+    { "name": "multiply", "kind": "function", "file": "math.ts", "line": 4 },
+    { "name": "compute", "kind": "function", "file": "main.ts", "line": 2 },
+    { "name": "sum", "kind": "constant", "file": "main.ts", "line": 3 },
+    { "name": "product", "kind": "constant", "file": "main.ts", "line": 4 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.ts", "line": 3, "col": 19 },
+      "to": { "name": "add", "file": "math.ts", "line": 0 }
+    },
+    {
+      "from": { "file": "main.ts", "line": 4, "col": 23 },
+      "to": { "name": "multiply", "file": "math.ts", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "compute", "callee": "add" },
+    { "caller": "compute", "callee": "multiply" }
+  ]
+}

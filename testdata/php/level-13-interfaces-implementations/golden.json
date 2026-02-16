@@ -1,0 +1,30 @@
+{
+  "definitions": [
+    { "name": "Animal", "kind": "interface", "file": "animals.php", "line": 2 },
+    { "name": "speak", "kind": "method", "file": "animals.php", "line": 3 },
+    { "name": "Dog", "kind": "class", "file": "animals.php", "line": 6 },
+    { "name": "speak", "kind": "method", "file": "animals.php", "line": 7 },
+    { "name": "Cat", "kind": "class", "file": "animals.php", "line": 12 },
+    { "name": "speak", "kind": "method", "file": "animals.php", "line": 13 },
+    { "name": "makeNoise", "kind": "function", "file": "animals.php", "line": 18 }
+  ],
+  "references": [
+    {
+      "_comment": "Dog implements Animal",
+      "from": { "file": "animals.php", "line": 6, "col": 21 },
+      "to": { "name": "Animal", "file": "animals.php", "line": 2 }
+    },
+    {
+      "_comment": "Cat implements Animal",
+      "from": { "file": "animals.php", "line": 12, "col": 21 },
+      "to": { "name": "Animal", "file": "animals.php", "line": 2 }
+    }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" },
+    { "type": "Cat", "interface": "Animal" }
+  ],
+  "calls": [
+    { "caller": "makeNoise", "callee": "speak" }
+  ]
+}

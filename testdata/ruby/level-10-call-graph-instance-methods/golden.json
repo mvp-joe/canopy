@@ -1,0 +1,22 @@
+{
+  "definitions": [
+    { "name": "Greeter", "kind": "class", "file": "greeter.rb", "line": 0 },
+    { "name": "greet", "kind": "method", "file": "greeter.rb", "line": 1 },
+    { "name": "build_message", "kind": "method", "file": "greeter.rb", "line": 6 },
+    { "name": "format", "kind": "method", "file": "greeter.rb", "line": 10 }
+  ],
+  "references": [
+    {
+      "from": { "file": "greeter.rb", "line": 2, "col": 19 },
+      "to": { "name": "build_message", "file": "greeter.rb", "line": 6 }
+    },
+    {
+      "from": { "file": "greeter.rb", "line": 3, "col": 9 },
+      "to": { "name": "format", "file": "greeter.rb", "line": 10 }
+    }
+  ],
+  "calls": [
+    { "caller": "greet", "callee": "build_message" },
+    { "caller": "greet", "callee": "format" }
+  ]
+}

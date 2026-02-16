@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "Rect", "kind": "struct", "file": "fields.c", "line": 0 },
+    { "name": "Circle", "kind": "struct", "file": "fields.c", "line": 5 },
+    { "name": "area_rect", "kind": "function", "file": "fields.c", "line": 9 },
+    { "name": "scale_radius", "kind": "function", "file": "fields.c", "line": 13 }
+  ],
+  "references": [
+    {
+      "_comment": "r->width resolves to Rect struct",
+      "from": { "file": "fields.c", "line": 10, "col": 14 },
+      "to": { "name": "Rect", "file": "fields.c", "line": 0 }
+    },
+    {
+      "_comment": "r->height resolves to Rect struct",
+      "from": { "file": "fields.c", "line": 10, "col": 25 },
+      "to": { "name": "Rect", "file": "fields.c", "line": 0 }
+    },
+    {
+      "_comment": "c.radius resolves to Circle struct",
+      "from": { "file": "fields.c", "line": 14, "col": 13 },
+      "to": { "name": "Circle", "file": "fields.c", "line": 5 }
+    }
+  ]
+}

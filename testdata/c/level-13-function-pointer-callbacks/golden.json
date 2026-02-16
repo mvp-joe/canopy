@@ -1,0 +1,35 @@
+{
+  "definitions": [
+    { "name": "handler_fn", "kind": "type_alias", "file": "dispatch.c", "line": 0 },
+    { "name": "Handlers", "kind": "struct", "file": "dispatch.c", "line": 2 },
+    { "name": "start_handler", "kind": "function", "file": "dispatch.c", "line": 7 },
+    { "name": "stop_handler", "kind": "function", "file": "dispatch.c", "line": 10 },
+    { "name": "run_handlers", "kind": "function", "file": "dispatch.c", "line": 13 },
+    { "name": "setup", "kind": "function", "file": "dispatch.c", "line": 18 }
+  ],
+  "references": [
+    {
+      "_comment": "start_handler used as function pointer value",
+      "from": { "file": "dispatch.c", "line": 20, "col": 17 },
+      "to": { "name": "start_handler", "file": "dispatch.c", "line": 7 }
+    },
+    {
+      "_comment": "stop_handler used as function pointer value",
+      "from": { "file": "dispatch.c", "line": 21, "col": 16 },
+      "to": { "name": "stop_handler", "file": "dispatch.c", "line": 10 }
+    },
+    {
+      "_comment": "on_start field access resolves to Handlers struct",
+      "from": { "file": "dispatch.c", "line": 20, "col": 6 },
+      "to": { "name": "Handlers", "file": "dispatch.c", "line": 2 }
+    },
+    {
+      "_comment": "on_stop field access resolves to Handlers struct",
+      "from": { "file": "dispatch.c", "line": 21, "col": 6 },
+      "to": { "name": "Handlers", "file": "dispatch.c", "line": 2 }
+    }
+  ],
+  "calls": [
+    { "caller": "setup", "callee": "run_handlers" }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "definitions": [
+    { "name": "Speaker", "kind": "interface", "file": "animal.ts", "line": 0 },
+    { "name": "Animal", "kind": "class", "file": "animal.ts", "line": 4 },
+    { "name": "speak", "kind": "method", "file": "animal.ts", "line": 5 },
+    { "name": "Dog", "kind": "class", "file": "dog.ts", "line": 2 },
+    { "name": "speak", "kind": "method", "file": "dog.ts", "line": 3 },
+    { "name": "fetch", "kind": "method", "file": "dog.ts", "line": 7 },
+    { "name": "run", "kind": "function", "file": "main.ts", "line": 2 },
+    { "name": "d", "kind": "constant", "file": "main.ts", "line": 3 }
+  ],
+  "references": [
+    {
+      "_comment": "new Dog() resolves to Dog class in dog.ts via import",
+      "from": { "file": "main.ts", "line": 3, "col": 16 },
+      "to": { "name": "Dog", "file": "dog.ts", "line": 2 }
+    },
+    {
+      "_comment": "d.fetch() resolves to fetch method in dog.ts",
+      "from": { "file": "main.ts", "line": 4, "col": 4 },
+      "to": { "name": "fetch", "file": "dog.ts", "line": 7 }
+    }
+  ],
+  "implementations": [
+    { "type": "Animal", "interface": "Speaker" },
+    { "type": "Dog", "interface": "Speaker" }
+  ],
+  "calls": [
+    { "caller": "run", "callee": "fetch" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "definitions": [
+    { "name": "Status", "kind": "enum", "file": "enums.c", "line": 0 },
+    { "name": "STATUS_OK", "kind": "constant", "file": "enums.c", "line": 1 },
+    { "name": "STATUS_ERROR", "kind": "constant", "file": "enums.c", "line": 2 },
+    { "name": "STATUS_PENDING", "kind": "constant", "file": "enums.c", "line": 3 },
+    { "name": "is_done", "kind": "function", "file": "enums.c", "line": 6 },
+    { "name": "get_default", "kind": "function", "file": "enums.c", "line": 10 }
+  ],
+  "references": [
+    {
+      "_comment": "STATUS_OK in is_done resolves to enum constant",
+      "from": { "file": "enums.c", "line": 7, "col": 16 },
+      "to": { "name": "STATUS_OK", "file": "enums.c", "line": 1 }
+    },
+    {
+      "_comment": "STATUS_ERROR in is_done resolves to enum constant",
+      "from": { "file": "enums.c", "line": 7, "col": 34 },
+      "to": { "name": "STATUS_ERROR", "file": "enums.c", "line": 2 }
+    },
+    {
+      "_comment": "STATUS_PENDING in get_default resolves to enum constant",
+      "from": { "file": "enums.c", "line": 11, "col": 11 },
+      "to": { "name": "STATUS_PENDING", "file": "enums.c", "line": 3 }
+    }
+  ]
+}

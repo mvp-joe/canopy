@@ -1,0 +1,36 @@
+{
+  "definitions": [
+    { "name": "Vec2", "kind": "struct", "file": "typedefs.c", "line": 0 },
+    { "name": "Vector2", "kind": "type_alias", "file": "typedefs.c", "line": 5 },
+    { "name": "Point2D", "kind": "type_alias", "file": "typedefs.c", "line": 6 },
+    { "name": "make_point", "kind": "function", "file": "typedefs.c", "line": 8 },
+    { "name": "add", "kind": "function", "file": "typedefs.c", "line": 15 }
+  ],
+  "references": [
+    {
+      "_comment": "Vector2 in typedef chain resolves to Vector2 type_alias",
+      "from": { "file": "typedefs.c", "line": 6, "col": 8 },
+      "to": { "name": "Vector2", "file": "typedefs.c", "line": 5 }
+    },
+    {
+      "_comment": "Point2D return type resolves to Point2D type_alias",
+      "from": { "file": "typedefs.c", "line": 8, "col": 0 },
+      "to": { "name": "Point2D", "file": "typedefs.c", "line": 6 }
+    },
+    {
+      "_comment": "Vector2 return type resolves to Vector2 type_alias",
+      "from": { "file": "typedefs.c", "line": 15, "col": 0 },
+      "to": { "name": "Vector2", "file": "typedefs.c", "line": 5 }
+    },
+    {
+      "_comment": "p.x field access resolves to Vec2 struct",
+      "from": { "file": "typedefs.c", "line": 10, "col": 6 },
+      "to": { "name": "Vec2", "file": "typedefs.c", "line": 0 }
+    },
+    {
+      "_comment": "result.x field access resolves to Vec2 struct",
+      "from": { "file": "typedefs.c", "line": 17, "col": 11 },
+      "to": { "name": "Vec2", "file": "typedefs.c", "line": 0 }
+    }
+  ]
+}

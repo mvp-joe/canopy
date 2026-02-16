@@ -735,13 +735,23 @@ func extract_declaration(node, parent_sym_id, parent_scope_id, is_interface, sym
         }
       }
 
-      // Also extract methods/fields/etc. inside the enum body
+      // Also extract methods/fields/etc. inside the enum body.
+      // Tree-sitter wraps post-semicolon members in enum_body_declarations,
+      // so we need to unwrap that node to reach the actual declarations.
       body_count := int(body_node.NamedChildCount())
       for i := 0; i < body_count; i++ {
         member := body_node.NamedChild(i)
         mt := member.Type()
-        // Skip enum constants (already handled above)
-        if mt != "enum_constant" {
+        if mt == "enum_constant" {
+          continue
+        }
+        if mt == "enum_body_declarations" {
+          ebd_count := int(member.NamedChildCount())
+          for j := 0; j < ebd_count; j++ {
+            ebd_child := member.NamedChild(j)
+            extract_declaration(ebd_child, sym_id, enum_scope_id, false, symbol_map, all_scopes)
+          }
+        } else {
           extract_declaration(member, sym_id, enum_scope_id, false, symbol_map, all_scopes)
         }
       }

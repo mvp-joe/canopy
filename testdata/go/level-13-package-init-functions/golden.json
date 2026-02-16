@@ -1,0 +1,27 @@
+{
+  "definitions": [
+    { "name": "startup", "kind": "package", "file": "config.go", "line": 0 },
+    { "name": "DefaultPort", "kind": "variable", "file": "config.go", "line": 2 },
+    { "name": "SetPort", "kind": "function", "file": "config.go", "line": 4 },
+    { "name": "init", "kind": "function", "file": "config.go", "line": 8 },
+    { "name": "startup", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "Ready", "kind": "variable", "file": "main.go", "line": 2 },
+    { "name": "setup", "kind": "function", "file": "main.go", "line": 4 },
+    { "name": "init", "kind": "function", "file": "main.go", "line": 8 },
+    { "name": "Run", "kind": "function", "file": "main.go", "line": 12 }
+  ],
+  "references": [
+    {
+      "from": { "file": "config.go", "line": 9, "col": 1 },
+      "to": { "name": "SetPort", "file": "config.go", "line": 4 }
+    },
+    {
+      "from": { "file": "main.go", "line": 9, "col": 1 },
+      "to": { "name": "setup", "file": "main.go", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "init", "callee": "SetPort" },
+    { "caller": "init", "callee": "setup" }
+  ]
+}

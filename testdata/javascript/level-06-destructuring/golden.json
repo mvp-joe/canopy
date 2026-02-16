@@ -1,0 +1,15 @@
+{
+  "definitions": [
+    { "name": "formatUser", "kind": "function", "file": "utils.js", "line": 0 },
+    { "name": "sum", "kind": "function", "file": "utils.js", "line": 4 },
+    { "name": "createPair", "kind": "function", "file": "utils.js", "line": 12 },
+    { "name": "logAll", "kind": "function", "file": "utils.js", "line": 16 },
+    { "name": "main", "kind": "function", "file": "utils.js", "line": 22 }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "formatUser" },
+    { "caller": "main", "callee": "sum" },
+    { "caller": "main", "callee": "createPair" },
+    { "caller": "main", "callee": "logAll" }
+  ]
+}

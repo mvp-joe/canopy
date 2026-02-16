@@ -1,0 +1,24 @@
+{
+  "definitions": [
+    { "name": "Drawable", "kind": "trait", "file": "traits.rs", "line": 0 },
+    { "name": "Circle", "kind": "struct", "file": "shapes.rs", "line": 0 },
+    { "name": "new", "kind": "function", "file": "shapes.rs", "line": 5 },
+    { "name": "draw", "kind": "method", "file": "shapes.rs", "line": 11 },
+    { "name": "area", "kind": "method", "file": "shapes.rs", "line": 15 },
+    { "name": "Square", "kind": "struct", "file": "shapes.rs", "line": 20 },
+    { "name": "draw", "kind": "method", "file": "shapes.rs", "line": 25 },
+    { "name": "area", "kind": "method", "file": "shapes.rs", "line": 29 },
+    { "name": "render", "kind": "function", "file": "shapes.rs", "line": 34 },
+    { "name": "main", "kind": "function", "file": "shapes.rs", "line": 41 }
+  ],
+  "implementations": [
+    { "type": "Circle", "interface": "Drawable" },
+    { "type": "Square", "interface": "Drawable" }
+  ],
+  "calls": [
+    { "caller": "render", "callee": "draw" },
+    { "caller": "render", "callee": "area" },
+    { "caller": "main", "callee": "new" },
+    { "caller": "main", "callee": "render" }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "definitions": [
+    { "name": "Engine", "kind": "class", "file": "engine.hpp", "line": 2 },
+    { "name": "run_engine", "kind": "function", "file": "engine.hpp", "line": 8 },
+    { "name": "run_engine", "kind": "function", "file": "engine.cpp", "line": 2 },
+    { "name": "Diesel", "kind": "class", "file": "diesel.cpp", "line": 2 },
+    { "name": "test_diesel", "kind": "function", "file": "diesel.cpp", "line": 8 }
+  ],
+  "implementations": [
+    { "type": "Diesel", "interface": "Engine" }
+  ],
+  "calls": [
+    { "caller": "run_engine", "callee": "start" },
+    { "caller": "run_engine", "callee": "stop" },
+    { "caller": "test_diesel", "callee": "run_engine" }
+  ]
+}

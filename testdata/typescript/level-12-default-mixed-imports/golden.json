@@ -1,0 +1,31 @@
+{
+  "definitions": [
+    { "name": "createApp", "kind": "function", "file": "config.ts", "line": 0 },
+    { "name": "getVersion", "kind": "function", "file": "config.ts", "line": 4 },
+    { "name": "info", "kind": "function", "file": "logger.ts", "line": 0 },
+    { "name": "boot", "kind": "function", "file": "main.ts", "line": 3 },
+    { "name": "ver", "kind": "constant", "file": "main.ts", "line": 5 }
+  ],
+  "references": [
+    {
+      "_comment": "default import: createApp resolves to config.ts",
+      "from": { "file": "main.ts", "line": 4, "col": 2 },
+      "to": { "name": "createApp", "file": "config.ts", "line": 0 }
+    },
+    {
+      "_comment": "named import from mixed import: getVersion resolves to config.ts",
+      "from": { "file": "main.ts", "line": 5, "col": 14 },
+      "to": { "name": "getVersion", "file": "config.ts", "line": 4 }
+    },
+    {
+      "_comment": "named import: info resolves to logger.ts",
+      "from": { "file": "main.ts", "line": 6, "col": 2 },
+      "to": { "name": "info", "file": "logger.ts", "line": 0 }
+    }
+  ],
+  "calls": [
+    { "caller": "boot", "callee": "createApp" },
+    { "caller": "boot", "callee": "getVersion" },
+    { "caller": "boot", "callee": "info" }
+  ]
+}

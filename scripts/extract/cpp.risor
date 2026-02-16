@@ -690,17 +690,22 @@ for _, m := range funcdef_matches {
   func_node := m["func"]
   fdecl_node := m["fdecl"]
 
-  // Skip if inside class/struct body (those are handled by extract_class_members)
+  // Detect if inside class/struct body (inline method definition)
   parent := func_node.Parent()
+  is_inline_method := false
+  class_parent_name := ""
   if parent != nil {
     pt := parent.Type()
     if pt == "field_declaration_list" || pt == "declaration_list" {
-      // Inside a class body or namespace body — skip class body but handle namespace
       grandparent := parent.Parent()
       if grandparent != nil {
         gpt := grandparent.Type()
         if gpt == "class_specifier" || gpt == "struct_specifier" {
-          continue
+          is_inline_method = true
+          cn := node_child(grandparent, "name")
+          if cn != nil {
+            class_parent_name = node_text(cn)
+          }
         }
       }
     }
@@ -723,10 +728,15 @@ for _, m := range funcdef_matches {
     ret_type = node_text(type_node)
   }
 
-  // Determine kind: "method" if qualified (Class::method), "function" otherwise
+  // Determine kind: "method" if inline or qualified (Class::method), "function" otherwise
   kind := "function"
   parent_id := nil
-  if name_node.Type() == "qualified_identifier" {
+  if is_inline_method {
+    kind = "method"
+    if class_parent_name != "" {
+      parent_id = find_symbol_id(class_parent_name, symbol_ids)
+    }
+  } else if name_node.Type() == "qualified_identifier" {
     kind = "method"
     scope_node := node_child(name_node, "scope")
     if scope_node != nil {
@@ -748,7 +758,10 @@ for _, m := range funcdef_matches {
     sym_map["parent_symbol_id"] = parent_id
   }
   sym_id := insert_symbol(sym_map)
-  symbol_ids[name] = sym_id
+  // Avoid overwriting class/struct symbols with same-named inline constructors
+  if !is_inline_method || !(name in symbol_ids) {
+    symbol_ids[name] = sym_id
+  }
 
   params_node := node_child(fdecl_node, "parameters")
   if params_node != nil {
@@ -1002,12 +1015,8 @@ fn_scope_matches := query("(function_definition) @fn", root)
 for _, m := range fn_scope_matches {
   fn_node := m["fn"]
 
-  // Skip if inside class body
-  parent := fn_node.Parent()
-  if parent != nil && parent.Type() == "field_declaration_list" {
-    continue
-  }
   // Skip template-wrapped (handled separately)
+  parent := fn_node.Parent()
   if parent != nil && parent.Type() == "template_declaration" {
     continue
   }

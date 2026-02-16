@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "make_greeter", "kind": "function", "file": "closures.py", "line": 0 },
+    { "name": "greet", "kind": "function", "file": "closures.py", "line": 1 },
+    { "name": "make_adder", "kind": "function", "file": "closures.py", "line": 6 },
+    { "name": "add", "kind": "function", "file": "closures.py", "line": 7 },
+    { "name": "pipeline", "kind": "function", "file": "closures.py", "line": 12 }
+  ],
+  "references": [
+    {
+      "_comment": "make_greeter() call in pipeline resolves to make_greeter",
+      "from": { "file": "closures.py", "line": 13, "col": 12 },
+      "to": { "name": "make_greeter", "file": "closures.py", "line": 0 }
+    },
+    {
+      "_comment": "make_adder() call in pipeline resolves to make_adder",
+      "from": { "file": "closures.py", "line": 14, "col": 15 },
+      "to": { "name": "make_adder", "file": "closures.py", "line": 6 }
+    }
+  ],
+  "calls": [
+    { "caller": "pipeline", "callee": "make_greeter" },
+    { "caller": "pipeline", "callee": "make_adder" }
+  ]
+}

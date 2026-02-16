@@ -1,0 +1,30 @@
+{
+  "definitions": [
+    { "name": "validate", "kind": "function", "file": "core.py", "line": 0 },
+    { "name": "transform", "kind": "function", "file": "core.py", "line": 4 },
+    { "name": "process", "kind": "function", "file": "middleware.py", "line": 3 },
+    { "name": "run", "kind": "function", "file": "app.py", "line": 4 }
+  ],
+  "references": [
+    {
+      "_comment": "validate() in middleware resolves to core.py",
+      "from": { "file": "middleware.py", "line": 4, "col": 7 },
+      "to": { "name": "validate", "file": "core.py", "line": 0 }
+    },
+    {
+      "_comment": "process() in app resolves to middleware.py",
+      "from": { "file": "app.py", "line": 5, "col": 13 },
+      "to": { "name": "process", "file": "middleware.py", "line": 3 }
+    },
+    {
+      "_comment": "transform() in app resolves to core.py",
+      "from": { "file": "app.py", "line": 6, "col": 11 },
+      "to": { "name": "transform", "file": "core.py", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "process", "callee": "validate" },
+    { "caller": "run", "callee": "process" },
+    { "caller": "run", "callee": "transform" }
+  ]
+}

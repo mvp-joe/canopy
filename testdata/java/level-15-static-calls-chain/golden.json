@@ -1,0 +1,23 @@
+{
+  "definitions": [
+    { "name": "svc", "kind": "package", "file": "Validator.java", "line": 0 },
+    { "name": "Validator", "kind": "class", "file": "Validator.java", "line": 2 },
+    { "name": "isValid", "kind": "method", "file": "Validator.java", "line": 3 },
+    { "name": "isEmpty", "kind": "method", "file": "Validator.java", "line": 7 },
+    { "name": "svc", "kind": "package", "file": "Processor.java", "line": 0 },
+    { "name": "Processor", "kind": "class", "file": "Processor.java", "line": 2 },
+    { "name": "Processor", "kind": "constructor", "file": "Processor.java", "line": 5 },
+    { "name": "process", "kind": "method", "file": "Processor.java", "line": 9 },
+    { "name": "transform", "kind": "method", "file": "Processor.java", "line": 16 },
+    { "name": "svc", "kind": "package", "file": "Runner.java", "line": 0 },
+    { "name": "Runner", "kind": "class", "file": "Runner.java", "line": 2 },
+    { "name": "run", "kind": "method", "file": "Runner.java", "line": 3 }
+  ],
+  "calls": [
+    { "caller": "isValid", "callee": "isEmpty" },
+    { "caller": "process", "callee": "isValid" },
+    { "caller": "process", "callee": "transform" },
+    { "caller": "run", "callee": "Processor" },
+    { "caller": "run", "callee": "process" }
+  ]
+}

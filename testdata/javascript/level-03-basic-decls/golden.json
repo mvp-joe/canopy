@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "greet", "kind": "function", "file": "main.js", "line": 0 },
+    { "name": "MAX_RETRIES", "kind": "constant", "file": "main.js", "line": 4 },
+    { "name": "counter", "kind": "variable", "file": "main.js", "line": 6 },
+    { "name": "globalFlag", "kind": "variable", "file": "main.js", "line": 8 },
+    { "name": "add", "kind": "function", "file": "main.js", "line": 10 },
+    { "name": "multiply", "kind": "function", "file": "main.js", "line": 12 },
+    { "name": "processItems", "kind": "function", "file": "main.js", "line": 16 }
+  ]
+}

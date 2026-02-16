@@ -1,0 +1,27 @@
+{
+  "definitions": [
+    { "name": "zoo", "kind": "package", "file": "Animal.java", "line": 0 },
+    { "name": "Animal", "kind": "interface", "file": "Animal.java", "line": 2 },
+    { "name": "speak", "kind": "method", "file": "Animal.java", "line": 3 },
+    { "name": "name", "kind": "method", "file": "Animal.java", "line": 4 },
+    { "name": "zoo", "kind": "package", "file": "Dog.java", "line": 0 },
+    { "name": "Dog", "kind": "class", "file": "Dog.java", "line": 2 },
+    { "name": "speak", "kind": "method", "file": "Dog.java", "line": 3 },
+    { "name": "name", "kind": "method", "file": "Dog.java", "line": 7 },
+    { "name": "fetch", "kind": "method", "file": "Dog.java", "line": 11 },
+    { "name": "zoo", "kind": "package", "file": "Main.java", "line": 0 },
+    { "name": "Main", "kind": "class", "file": "Main.java", "line": 2 },
+    { "name": "describe", "kind": "method", "file": "Main.java", "line": 3 },
+    { "name": "main", "kind": "method", "file": "Main.java", "line": 9 }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" }
+  ],
+  "calls": [
+    { "caller": "describe", "callee": "speak" },
+    { "caller": "describe", "callee": "name" },
+    { "caller": "fetch", "callee": "speak" },
+    { "caller": "main", "callee": "describe" },
+    { "caller": "main", "callee": "fetch" }
+  ]
+}

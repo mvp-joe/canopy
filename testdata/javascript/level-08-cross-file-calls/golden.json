@@ -1,0 +1,45 @@
+{
+  "definitions": [
+    { "name": "info", "kind": "function", "file": "logger.js", "line": 0 },
+    { "name": "warn", "kind": "function", "file": "logger.js", "line": 4 },
+    { "name": "Logger", "kind": "class", "file": "logger.js", "line": 8 },
+    { "name": "constructor", "kind": "method", "file": "logger.js", "line": 9 },
+    { "name": "log", "kind": "method", "file": "logger.js", "line": 13 },
+    { "name": "startService", "kind": "function", "file": "service.js", "line": 2 },
+    { "name": "stopService", "kind": "function", "file": "service.js", "line": 7 },
+    { "name": "run", "kind": "function", "file": "main.js", "line": 3 }
+  ],
+  "references": [
+    {
+      "_comment": "info() in service.js resolves to logger.js info",
+      "from": { "file": "service.js", "line": 3, "col": 2 },
+      "to": { "name": "info", "file": "logger.js", "line": 0 }
+    },
+    {
+      "_comment": "warn() in service.js resolves to logger.js warn",
+      "from": { "file": "service.js", "line": 8, "col": 2 },
+      "to": { "name": "warn", "file": "logger.js", "line": 4 }
+    },
+    {
+      "_comment": "startService() in main.js resolves to service.js",
+      "from": { "file": "main.js", "line": 4, "col": 2 },
+      "to": { "name": "startService", "file": "service.js", "line": 2 }
+    },
+    {
+      "_comment": "stopService() in main.js resolves to service.js",
+      "from": { "file": "main.js", "line": 6, "col": 2 },
+      "to": { "name": "stopService", "file": "service.js", "line": 7 }
+    },
+    {
+      "_comment": "new Logger() in main.js resolves to logger.js class",
+      "from": { "file": "main.js", "line": 5, "col": 18 },
+      "to": { "name": "Logger", "file": "logger.js", "line": 8 }
+    }
+  ],
+  "calls": [
+    { "caller": "startService", "callee": "info" },
+    { "caller": "stopService", "callee": "warn" },
+    { "caller": "run", "callee": "startService" },
+    { "caller": "run", "callee": "stopService" }
+  ]
+}

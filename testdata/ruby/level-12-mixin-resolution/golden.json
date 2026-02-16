@@ -1,0 +1,28 @@
+{
+  "definitions": [
+    { "name": "Loggable", "kind": "module", "file": "services.rb", "line": 0 },
+    { "name": "log", "kind": "method", "file": "services.rb", "line": 1 },
+    { "name": "Serializable", "kind": "module", "file": "services.rb", "line": 6 },
+    { "name": "to_json", "kind": "method", "file": "services.rb", "line": 7 },
+    { "name": "Service", "kind": "class", "file": "services.rb", "line": 12 },
+    { "name": "run", "kind": "method", "file": "services.rb", "line": 16 }
+  ],
+  "references": [
+    {
+      "from": { "file": "services.rb", "line": 17, "col": 9 },
+      "to": { "name": "log", "file": "services.rb", "line": 1 }
+    },
+    {
+      "from": { "file": "services.rb", "line": 18, "col": 9 },
+      "to": { "name": "to_json", "file": "services.rb", "line": 7 }
+    }
+  ],
+  "implementations": [
+    { "type": "Service", "interface": "Loggable" },
+    { "type": "Service", "interface": "Serializable" }
+  ],
+  "calls": [
+    { "caller": "run", "callee": "log" },
+    { "caller": "run", "callee": "to_json" }
+  ]
+}

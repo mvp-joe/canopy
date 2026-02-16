@@ -1,0 +1,34 @@
+{
+  "definitions": [
+    { "name": "Base", "kind": "class", "file": "base.rb", "line": 0 },
+    { "name": "create", "kind": "method", "file": "base.rb", "line": 1 },
+    { "name": "validate", "kind": "method", "file": "base.rb", "line": 5 },
+    { "name": "Child", "kind": "class", "file": "child.rb", "line": 2 },
+    { "name": "process", "kind": "method", "file": "child.rb", "line": 3 }
+  ],
+  "references": [
+    {
+      "from": { "file": "child.rb", "line": 2, "col": 14 },
+      "to": { "name": "Base", "file": "base.rb", "line": 0 }
+    },
+    {
+      "from": { "file": "child.rb", "line": 4, "col": 9 },
+      "to": { "name": "validate", "file": "base.rb", "line": 5 }
+    },
+    {
+      "from": { "file": "child.rb", "line": 5, "col": 4 },
+      "to": { "name": "Child", "file": "child.rb", "line": 2 }
+    },
+    {
+      "from": { "file": "child.rb", "line": 5, "col": 10 },
+      "to": { "name": "create", "file": "base.rb", "line": 1 }
+    }
+  ],
+  "implementations": [
+    { "type": "Child", "interface": "Base" }
+  ],
+  "calls": [
+    { "caller": "process", "callee": "validate" },
+    { "caller": "process", "callee": "create" }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "definitions": [
+    { "name": "Calculator", "kind": "class", "file": "math.php", "line": 2 },
+    { "name": "add", "kind": "method", "file": "math.php", "line": 3 },
+    { "name": "subtract", "kind": "method", "file": "math.php", "line": 7 },
+    { "name": "compute", "kind": "function", "file": "main.php", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "Calculator::add() — class reference",
+      "from": { "file": "main.php", "line": 3, "col": 11 },
+      "to": { "name": "Calculator", "file": "math.php", "line": 2 }
+    },
+    {
+      "_comment": "Calculator::add() — method reference",
+      "from": { "file": "main.php", "line": 3, "col": 23 },
+      "to": { "name": "add", "file": "math.php", "line": 3 }
+    },
+    {
+      "_comment": "Calculator::subtract() — class reference",
+      "from": { "file": "main.php", "line": 4, "col": 12 },
+      "to": { "name": "Calculator", "file": "math.php", "line": 2 }
+    },
+    {
+      "_comment": "Calculator::subtract() — method reference",
+      "from": { "file": "main.php", "line": 4, "col": 24 },
+      "to": { "name": "subtract", "file": "math.php", "line": 7 }
+    }
+  ],
+  "calls": [
+    { "caller": "compute", "callee": "add" },
+    { "caller": "compute", "callee": "subtract" }
+  ]
+}

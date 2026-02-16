@@ -1,0 +1,27 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "shapes.js", "line": 0 },
+    { "name": "constructor", "kind": "method", "file": "shapes.js", "line": 3 },
+    { "name": "describe", "kind": "method", "file": "shapes.js", "line": 7 },
+    { "name": "Circle", "kind": "class", "file": "shapes.js", "line": 12 },
+    { "name": "constructor", "kind": "method", "file": "shapes.js", "line": 15 },
+    { "name": "area", "kind": "method", "file": "shapes.js", "line": 20 },
+    { "name": "main", "kind": "function", "file": "shapes.js", "line": 25 }
+  ],
+  "references": [
+    {
+      "_comment": "new Shape() should resolve to class Shape",
+      "from": { "file": "shapes.js", "line": 26, "col": 16 },
+      "to": { "name": "Shape", "file": "shapes.js", "line": 0 }
+    },
+    {
+      "_comment": "new Circle() should resolve to class Circle",
+      "from": { "file": "shapes.js", "line": 27, "col": 16 },
+      "to": { "name": "Circle", "file": "shapes.js", "line": 12 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "describe" },
+    { "caller": "main", "callee": "area" }
+  ]
+}

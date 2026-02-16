@@ -1,0 +1,31 @@
+{
+  "definitions": [
+    { "name": "Animal", "kind": "class", "file": "animals.rb", "line": 0 },
+    { "name": "speak", "kind": "method", "file": "animals.rb", "line": 1 },
+    { "name": "describe", "kind": "method", "file": "animals.rb", "line": 5 },
+    { "name": "Dog", "kind": "class", "file": "animals.rb", "line": 10 },
+    { "name": "speak", "kind": "method", "file": "animals.rb", "line": 11 },
+    { "name": "greet", "kind": "method", "file": "animals.rb", "line": 15 }
+  ],
+  "references": [
+    {
+      "from": { "file": "animals.rb", "line": 10, "col": 12 },
+      "to": { "name": "Animal", "file": "animals.rb", "line": 0 }
+    },
+    {
+      "from": { "file": "animals.rb", "line": 6, "col": 9 },
+      "to": { "name": "speak", "file": "animals.rb", "line": 1 }
+    },
+    {
+      "from": { "file": "animals.rb", "line": 16, "col": 9 },
+      "to": { "name": "describe", "file": "animals.rb", "line": 5 }
+    }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" }
+  ],
+  "calls": [
+    { "caller": "describe", "callee": "speak" },
+    { "caller": "greet", "callee": "describe" }
+  ]
+}

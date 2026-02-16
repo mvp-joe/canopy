@@ -1,0 +1,29 @@
+{
+  "definitions": [
+    { "name": "Account", "kind": "class", "file": "account.py", "line": 0 },
+    { "name": "__init__", "kind": "method", "file": "account.py", "line": 1 },
+    { "name": "deposit", "kind": "method", "file": "account.py", "line": 5 },
+    { "name": "get_info", "kind": "method", "file": "account.py", "line": 8 },
+    { "name": "SavingsAccount", "kind": "class", "file": "account.py", "line": 12 },
+    { "name": "__init__", "kind": "method", "file": "account.py", "line": 13 },
+    { "name": "apply_interest", "kind": "method", "file": "account.py", "line": 16 }
+  ],
+  "references": [
+    {
+      "_comment": "SavingsAccount(Account) base class ref resolves to Account",
+      "from": { "file": "account.py", "line": 12, "col": 21 },
+      "to": { "name": "Account", "file": "account.py", "line": 0 }
+    },
+    {
+      "_comment": "self.deposit() in apply_interest resolves to inherited Account.deposit",
+      "from": { "file": "account.py", "line": 17, "col": 13 },
+      "to": { "name": "deposit", "file": "account.py", "line": 5 }
+    }
+  ],
+  "implementations": [
+    { "type": "SavingsAccount", "interface": "Account" }
+  ],
+  "calls": [
+    { "caller": "apply_interest", "callee": "deposit" }
+  ]
+}

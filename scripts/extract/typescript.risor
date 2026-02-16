@@ -406,23 +406,20 @@ for _, m := range import_matches {
     })
   }
 
-  // Check for default import (direct identifier child of import_clause)
-  // The default import is an identifier that is a direct child of import_clause,
-  // NOT inside named_imports or namespace_import
-  if len(named_matches) == 0 && len(ns_matches) == 0 {
-    // The whole clause might be a default import
-    cc := int(clause.NamedChildCount())
-    for i := 0; i < cc; i++ {
-      ch := clause.NamedChild(i)
-      if ch.Type() == "identifier" {
-        insert_import({
-          file_id: file_id,
-          source: source,
-          imported_name: node_text(ch),
-          kind: "default",
-          scope: "file",
-        })
-      }
+  // Check for default import (direct identifier child of import_clause).
+  // This handles both pure defaults (import Foo from ...) and mixed imports
+  // (import Foo, { bar } from ...) where the default is a sibling of named_imports.
+  cc := int(clause.NamedChildCount())
+  for i := 0; i < cc; i++ {
+    ch := clause.NamedChild(i)
+    if ch.Type() == "identifier" {
+      insert_import({
+        file_id: file_id,
+        source: source,
+        imported_name: node_text(ch),
+        kind: "default",
+        scope: "file",
+      })
     }
   }
 }

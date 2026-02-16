@@ -1,0 +1,18 @@
+{
+  "definitions": [
+    { "name": "Shape", "kind": "class", "file": "shapes.hpp", "line": 2 },
+    { "name": "Circle", "kind": "class", "file": "shapes.hpp", "line": 8 },
+    { "name": "Square", "kind": "class", "file": "shapes.hpp", "line": 14 },
+    { "name": "print_area", "kind": "function", "file": "main.cpp", "line": 2 },
+    { "name": "main", "kind": "function", "file": "main.cpp", "line": 7 }
+  ],
+  "implementations": [
+    { "type": "Circle", "interface": "Shape" },
+    { "type": "Square", "interface": "Shape" }
+  ],
+  "calls": [
+    { "caller": "print_area", "callee": "area" },
+    { "caller": "print_area", "callee": "describe" },
+    { "caller": "main", "callee": "print_area" }
+  ]
+}

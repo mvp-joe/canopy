@@ -1,0 +1,18 @@
+{
+  "definitions": [
+    { "name": "App\\Models", "kind": "namespace", "file": "models.php", "line": 2 },
+    { "name": "User", "kind": "class", "file": "models.php", "line": 4 },
+    { "name": "greet", "kind": "method", "file": "models.php", "line": 5 },
+    { "name": "main", "kind": "function", "file": "app.php", "line": 4 }
+  ],
+  "references": [
+    {
+      "_comment": "new User() resolves via use statement to User class in models.php",
+      "from": { "file": "app.php", "line": 5, "col": 13 },
+      "to": { "name": "User", "file": "models.php", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "main", "callee": "greet" }
+  ]
+}

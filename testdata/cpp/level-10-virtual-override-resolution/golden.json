@@ -1,0 +1,11 @@
+{
+  "definitions": [
+    { "name": "Animal", "kind": "class", "file": "animals.cpp", "line": 0 },
+    { "name": "Dog", "kind": "class", "file": "animals.cpp", "line": 6 },
+    { "name": "Snake", "kind": "class", "file": "animals.cpp", "line": 12 }
+  ],
+  "implementations": [
+    { "type": "Dog", "interface": "Animal" },
+    { "type": "Snake", "interface": "Animal" }
+  ]
+}

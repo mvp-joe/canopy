@@ -1,0 +1,52 @@
+{
+  "definitions": [
+    { "name": "typeflow", "kind": "package", "file": "iface.go", "line": 0 },
+    { "name": "Shape", "kind": "interface", "file": "iface.go", "line": 2 },
+    { "name": "Stringer", "kind": "interface", "file": "iface.go", "line": 6 },
+    { "name": "typeflow", "kind": "package", "file": "types.go", "line": 0 },
+    { "name": "Circle", "kind": "struct", "file": "types.go", "line": 2 },
+    { "name": "Area", "kind": "method", "file": "types.go", "line": 6 },
+    { "name": "String", "kind": "method", "file": "types.go", "line": 10 },
+    { "name": "Square", "kind": "struct", "file": "types.go", "line": 14 },
+    { "name": "Area", "kind": "method", "file": "types.go", "line": 18 },
+    { "name": "typeflow", "kind": "package", "file": "main.go", "line": 0 },
+    { "name": "TypeAssert", "kind": "function", "file": "main.go", "line": 2 },
+    { "name": "c", "kind": "variable", "file": "main.go", "line": 3 },
+    { "name": "ok", "kind": "variable", "file": "main.go", "line": 3 },
+    { "name": "TypeSwitch", "kind": "function", "file": "main.go", "line": 10 }
+  ],
+  "references": [
+    {
+      "from": { "file": "main.go", "line": 2, "col": 18 },
+      "to": { "name": "Shape", "file": "iface.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 3, "col": 13 },
+      "to": { "name": "Circle", "file": "types.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 5, "col": 11 },
+      "to": { "name": "String", "file": "types.go", "line": 10 }
+    },
+    {
+      "from": { "file": "main.go", "line": 10, "col": 18 },
+      "to": { "name": "Shape", "file": "iface.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 12, "col": 6 },
+      "to": { "name": "Circle", "file": "types.go", "line": 2 }
+    },
+    {
+      "from": { "file": "main.go", "line": 14, "col": 6 },
+      "to": { "name": "Square", "file": "types.go", "line": 14 }
+    }
+  ],
+  "implementations": [
+    { "type": "Circle", "interface": "Shape" },
+    { "type": "Circle", "interface": "Stringer" },
+    { "type": "Square", "interface": "Shape" }
+  ],
+  "calls": [
+    { "caller": "TypeAssert", "callee": "String" }
+  ]
+}

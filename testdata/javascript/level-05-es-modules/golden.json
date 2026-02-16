@@ -1,0 +1,25 @@
+{
+  "definitions": [
+    { "name": "add", "kind": "function", "file": "math.js", "line": 0 },
+    { "name": "subtract", "kind": "function", "file": "math.js", "line": 4 },
+    { "name": "PI", "kind": "constant", "file": "math.js", "line": 8 },
+    { "name": "internalHelper", "kind": "function", "file": "math.js", "line": 10 },
+    { "name": "compute", "kind": "function", "file": "app.js", "line": 2 }
+  ],
+  "references": [
+    {
+      "_comment": "add() in app.js should resolve to exported add in math.js",
+      "from": { "file": "app.js", "line": 3, "col": 14 },
+      "to": { "name": "add", "file": "math.js", "line": 0 }
+    },
+    {
+      "_comment": "subtract() in app.js should resolve to exported subtract in math.js",
+      "from": { "file": "app.js", "line": 4, "col": 15 },
+      "to": { "name": "subtract", "file": "math.js", "line": 4 }
+    }
+  ],
+  "calls": [
+    { "caller": "compute", "callee": "add" },
+    { "caller": "compute", "callee": "subtract" }
+  ]
+}
