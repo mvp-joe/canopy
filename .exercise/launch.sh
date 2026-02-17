@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION_ID="canopy-20260216-232119"
+SESSION_ID="canopy-20260217-062127"
 SESSION="exercise-$SESSION_ID"
 PROJECT_DIR="/home/joe/code/canopy"
 EXERCISER_DIR="/tmp/claude-exercise-$SESSION_ID"
@@ -20,7 +20,7 @@ tmux send-keys -t "$SESSION:main" "Read $BUILDER_INIT and follow those instructi
 
 # Exerciser pane (right) — claude picks up CLAUDE.md from cwd automatically
 tmux split-window -h -t "$SESSION:main"
-tmux send-keys -t "$SESSION:main.1" "cd \"$EXERCISER_DIR\" && claude --dangerously-skip-permissions" Enter
+tmux send-keys -t "$SESSION:main.1" "export PATH=\"/tmp:\$PATH\" && cd \"$EXERCISER_DIR\" && claude --dangerously-skip-permissions" Enter
 sleep 8
 tmux send-keys -t "$SESSION:main.1" "Read your CLAUDE.md and follow those instructions exactly. Begin now." Enter
 
