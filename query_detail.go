@@ -4,18 +4,16 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/jward/canopy/internal/store"
 )
 
 // SymbolDetail is a combined response that bundles a symbol with all of its
 // structural metadata. One call replaces four separate Store lookups.
 type SymbolDetail struct {
 	Symbol      SymbolResult           // the symbol itself with ref counts
-	Parameters  []*store.FunctionParam // function/method params, receiver, returns (empty for non-functions)
-	Members     []*store.TypeMember    // struct fields, class methods, interface contracts (empty for non-types)
-	TypeParams  []*store.TypeParam     // generic type parameters with constraints (empty if non-generic)
-	Annotations []*store.Annotation    // decorators, annotations, attributes (empty if none)
+	Parameters  []*FunctionParam // function/method params, receiver, returns (empty for non-functions)
+	Members     []*TypeMember    // struct fields, class methods, interface contracts (empty for non-types)
+	TypeParams  []*TypeParam     // generic type parameters with constraints (empty if non-generic)
+	Annotations []*Annotation    // decorators, annotations, attributes (empty if none)
 }
 
 // SymbolDetail returns a combined response with the symbol and all its
@@ -51,16 +49,16 @@ func (q *QueryBuilder) SymbolDetail(symbolID int64) (*SymbolDetail, error) {
 	}
 
 	if params == nil {
-		params = []*store.FunctionParam{}
+		params = []*FunctionParam{}
 	}
 	if members == nil {
-		members = []*store.TypeMember{}
+		members = []*TypeMember{}
 	}
 	if typeParams == nil {
-		typeParams = []*store.TypeParam{}
+		typeParams = []*TypeParam{}
 	}
 	if annotations == nil {
-		annotations = []*store.Annotation{}
+		annotations = []*Annotation{}
 	}
 
 	return &SymbolDetail{
@@ -91,7 +89,7 @@ func (q *QueryBuilder) SymbolDetailAt(file string, line, col int) (*SymbolDetail
 // walks parent_scope_id to the file scope.
 // Line and col are 0-based. Returns nil slice, nil error if no scope contains
 // the position or file is not indexed.
-func (q *QueryBuilder) ScopeAt(file string, line, col int) ([]*store.Scope, error) {
+func (q *QueryBuilder) ScopeAt(file string, line, col int) ([]*Scope, error) {
 	f, err := q.store.FileByPath(file)
 	if err != nil {
 		return nil, fmt.Errorf("scope at: lookup file: %w", err)

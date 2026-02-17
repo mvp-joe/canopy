@@ -110,7 +110,7 @@ func (e *Engine) Close() error {
 }
 
 // Store returns the underlying Store for direct access.
-func (e *Engine) Store() *store.Store {
+func (e *Engine) Store() *Store {
 	return e.store
 }
 

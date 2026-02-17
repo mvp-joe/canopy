@@ -68,7 +68,7 @@ type Sort struct {
 
 // SymbolResult extends Symbol with computed fields useful for discovery.
 type SymbolResult struct {
-	store.Symbol
+	Symbol
 	FilePath         string // resolved file path (empty for multi-file symbols)
 	RefCount         int    // total resolved references targeting this symbol
 	ExternalRefCount int    // refs from other files
@@ -273,7 +273,7 @@ func (q *QueryBuilder) Symbols(filter SymbolFilter, sort Sort, page Pagination) 
 }
 
 // Files is a convenience method for listing files.
-func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page Pagination) (*PagedResult[store.File], error) {
+func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page Pagination) (*PagedResult[File], error) {
 	page = page.normalize()
 
 	var where []string
@@ -317,9 +317,9 @@ func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page
 	}
 	defer rows.Close()
 
-	var items []store.File
+	var items []File
 	for rows.Next() {
-		var f store.File
+		var f File
 		if err := rows.Scan(&f.ID, &f.Path, &f.Language, &f.Hash, &f.LineCount, &f.LastIndexed); err != nil {
 			return nil, fmt.Errorf("files: scan: %w", err)
 		}
@@ -329,10 +329,10 @@ func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page
 		return nil, fmt.Errorf("files: rows: %w", err)
 	}
 	if items == nil {
-		items = []store.File{}
+		items = []File{}
 	}
 
-	return &PagedResult[store.File]{Items: items, TotalCount: totalCount}, nil
+	return &PagedResult[File]{Items: items, TotalCount: totalCount}, nil
 }
 
 // Packages is a convenience method for listing packages, modules, and namespaces.

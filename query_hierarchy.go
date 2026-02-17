@@ -2,8 +2,6 @@ package canopy
 
 import (
 	"fmt"
-
-	"github.com/jward/canopy/internal/store"
 )
 
 // TypeRelation represents a relationship between two types in a hierarchy.
@@ -20,7 +18,7 @@ type TypeHierarchy struct {
 	ImplementedBy []*TypeRelation           // concrete types implementing this interface/trait
 	Composes      []*TypeRelation           // parent types (inherited, embedded, composed)
 	ComposedBy    []*TypeRelation           // child types that inherit/embed/compose this type
-	Extensions    []*store.ExtensionBinding // extension methods, trait impls, default impls
+	Extensions    []*ExtensionBinding // extension methods, trait impls, default impls
 }
 
 // TypeHierarchy returns the full type hierarchy for a symbol: what it
@@ -113,7 +111,7 @@ func (q *QueryBuilder) TypeHierarchy(symbolID int64) (*TypeHierarchy, error) {
 		return nil, fmt.Errorf("type hierarchy: extension bindings: %w", err)
 	}
 	if extensions == nil {
-		extensions = []*store.ExtensionBinding{}
+		extensions = []*ExtensionBinding{}
 	}
 
 	return &TypeHierarchy{
@@ -151,25 +149,25 @@ func (q *QueryBuilder) ImplementsInterfaces(typeSymbolID int64) ([]Location, err
 }
 
 // ExtensionMethods returns extension bindings for a type.
-func (q *QueryBuilder) ExtensionMethods(typeSymbolID int64) ([]*store.ExtensionBinding, error) {
+func (q *QueryBuilder) ExtensionMethods(typeSymbolID int64) ([]*ExtensionBinding, error) {
 	bindings, err := q.store.ExtensionBindingsByType(typeSymbolID)
 	if err != nil {
 		return nil, fmt.Errorf("extension methods: %w", err)
 	}
 	if bindings == nil {
-		bindings = []*store.ExtensionBinding{}
+		bindings = []*ExtensionBinding{}
 	}
 	return bindings, nil
 }
 
 // Reexports returns re-exported symbols from a file.
-func (q *QueryBuilder) Reexports(fileID int64) ([]*store.Reexport, error) {
+func (q *QueryBuilder) Reexports(fileID int64) ([]*Reexport, error) {
 	reexports, err := q.store.ReexportsByFile(fileID)
 	if err != nil {
 		return nil, fmt.Errorf("reexports: %w", err)
 	}
 	if reexports == nil {
-		reexports = []*store.Reexport{}
+		reexports = []*Reexport{}
 	}
 	return reexports, nil
 }

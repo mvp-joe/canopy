@@ -16,7 +16,7 @@ type QueryBuilder struct {
 
 // NewQueryBuilder creates a QueryBuilder from a Store.
 // Used by the CLI for query commands that don't need the Engine.
-func NewQueryBuilder(s *store.Store) *QueryBuilder {
+func NewQueryBuilder(s *Store) *QueryBuilder {
 	return &QueryBuilder{store: s}
 }
 
@@ -33,7 +33,7 @@ type Location struct {
 // SymbolAt returns the most specific (narrowest) symbol whose range contains the
 // given file position. Line and col are 0-based (tree-sitter convention).
 // Returns nil with no error if no symbol exists at that location.
-func (q *QueryBuilder) SymbolAt(file string, line, col int) (*store.Symbol, error) {
+func (q *QueryBuilder) SymbolAt(file string, line, col int) (*Symbol, error) {
 	f, err := q.store.FileByPath(file)
 	if err != nil {
 		return nil, fmt.Errorf("symbol at: lookup file: %w", err)
@@ -178,24 +178,24 @@ func (q *QueryBuilder) Implementations(symbolID int64) ([]Location, error) {
 }
 
 // Callers returns call graph edges where the given symbol is the callee.
-func (q *QueryBuilder) Callers(symbolID int64) ([]*store.CallEdge, error) {
+func (q *QueryBuilder) Callers(symbolID int64) ([]*CallEdge, error) {
 	return q.store.CallersByCallee(symbolID)
 }
 
 // Callees returns call graph edges where the given symbol is the caller.
-func (q *QueryBuilder) Callees(symbolID int64) ([]*store.CallEdge, error) {
+func (q *QueryBuilder) Callees(symbolID int64) ([]*CallEdge, error) {
 	return q.store.CalleesByCaller(symbolID)
 }
 
 // Dependencies returns all imports for the given file.
-func (q *QueryBuilder) Dependencies(fileID int64) ([]*store.Import, error) {
+func (q *QueryBuilder) Dependencies(fileID int64) ([]*Import, error) {
 	return q.store.ImportsByFile(fileID)
 }
 
 // Dependents returns all imports across all files that reference the given source.
 // Matches both exact source strings and suffix matches (e.g. "util" matches
 // "github.com/example/util").
-func (q *QueryBuilder) Dependents(source string) ([]*store.Import, error) {
+func (q *QueryBuilder) Dependents(source string) ([]*Import, error) {
 	rows, err := q.store.DB().Query(
 		"SELECT id, file_id, source, imported_name, local_alias, kind, scope FROM imports WHERE source = ? OR source LIKE ?",
 		source, "%/"+source,
@@ -205,9 +205,9 @@ func (q *QueryBuilder) Dependents(source string) ([]*store.Import, error) {
 	}
 	defer rows.Close()
 
-	var imports []*store.Import
+	var imports []*Import
 	for rows.Next() {
-		imp := &store.Import{}
+		imp := &Import{}
 		if err := rows.Scan(&imp.ID, &imp.FileID, &imp.Source, &imp.ImportedName,
 			&imp.LocalAlias, &imp.Kind, &imp.Scope); err != nil {
 			return nil, fmt.Errorf("dependents: scan import: %w", err)

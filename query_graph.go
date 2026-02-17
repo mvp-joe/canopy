@@ -36,8 +36,8 @@ type CallGraphEdge struct {
 type callGraphData struct {
 	forward   map[int64][]int64            // caller -> callees
 	reverse   map[int64][]int64            // callee -> callers
-	edgesByCaller map[int64][]*store.CallEdge // edges keyed by caller
-	edgesByCallee map[int64][]*store.CallEdge // edges keyed by callee
+	edgesByCaller map[int64][]*CallEdge // edges keyed by caller
+	edgesByCallee map[int64][]*CallEdge // edges keyed by callee
 	filePaths map[int64]string              // file ID -> path
 }
 
@@ -57,8 +57,8 @@ func (q *QueryBuilder) buildCallGraph() (*callGraphData, error) {
 	data := &callGraphData{
 		forward:       make(map[int64][]int64),
 		reverse:       make(map[int64][]int64),
-		edgesByCaller: make(map[int64][]*store.CallEdge),
-		edgesByCallee: make(map[int64][]*store.CallEdge),
+		edgesByCaller: make(map[int64][]*CallEdge),
+		edgesByCallee: make(map[int64][]*CallEdge),
 		filePaths:     filePaths,
 	}
 
@@ -72,9 +72,9 @@ func (q *QueryBuilder) buildCallGraph() (*callGraphData, error) {
 	return data, nil
 }
 
-// resolveCallGraphEdge converts a store.CallEdge to a CallGraphEdge,
+// resolveCallGraphEdge converts a CallEdge to a CallGraphEdge,
 // resolving FileID to a file path string.
-func resolveCallGraphEdge(edge *store.CallEdge, filePaths map[int64]string) CallGraphEdge {
+func resolveCallGraphEdge(edge *CallEdge, filePaths map[int64]string) CallGraphEdge {
 	file := ""
 	if edge.FileID != nil {
 		file = filePaths[*edge.FileID]
