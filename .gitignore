@@ -3,4 +3,4 @@
 target/
 Cargo.lock
 mise.toml
-.canopy/index.db
+**/.canopy/index.db
