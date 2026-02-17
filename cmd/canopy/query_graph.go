@@ -201,7 +201,7 @@ func runUnused(cmd *cobra.Command, args []string) error {
 	}
 
 	qb := canopy.NewQueryBuilder(s)
-	result, err := qb.UnusedSymbols(filter, buildPagination())
+	result, err := qb.UnusedSymbols(filter, buildSort(), buildPagination())
 	if err != nil {
 		return outputError("unused", err)
 	}
@@ -210,6 +210,7 @@ func runUnused(cmd *cobra.Command, args []string) error {
 	for i, sr := range result.Items {
 		cliSyms[i] = symbolResultToCLI(sr)
 	}
+
 
 	return outputResult(CLIResult{
 		Command:    "unused",
@@ -276,7 +277,7 @@ func callGraphToCLI(g *canopy.CallGraph) CLICallGraph {
 		Root:     g.Root,
 		Nodes:    nodes,
 		Edges:    edges,
-		MaxDepth: g.Depth,
+		Depth:    g.Depth,
 	}
 }
 

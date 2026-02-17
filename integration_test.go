@@ -432,7 +432,7 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 	})
 
 	t.Run("Symbols_FilterByKind_Struct", func(t *testing.T) {
-		result, err := q.Symbols(SymbolFilter{Kinds: []string{"struct"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		result, err := q.Symbols(SymbolFilter{Kinds: []string{"struct"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		assert.Greater(t, result.TotalCount, 0)
 		// Should find key structs
@@ -447,7 +447,7 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 	})
 
 	t.Run("Symbols_FilterByKind_Function", func(t *testing.T) {
-		result, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		result, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		assert.Greater(t, result.TotalCount, 0)
 		assert.True(t, containsSymbolNamed(result.Items, "New"), "should find New() engine constructor")
@@ -458,7 +458,7 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 
 	t.Run("Symbols_FilterByVisibility_Public", func(t *testing.T) {
 		vis := "public"
-		result, err := q.Symbols(SymbolFilter{Visibility: &vis}, Sort{}, Pagination{Limit: 500})
+		result, err := q.Symbols(SymbolFilter{Visibility: &vis}, Sort{}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		assert.Greater(t, result.TotalCount, 0)
 		for _, item := range result.Items {
@@ -469,7 +469,7 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 	t.Run("Symbols_FilterByPathPrefix", func(t *testing.T) {
 		// Use absolute path prefix since we indexed absolute paths
 		storePrefix := filepath.Join(modRoot, "internal", "store") + "/"
-		result, err := q.Symbols(SymbolFilter{PathPrefix: &storePrefix}, Sort{}, Pagination{Limit: 500})
+		result, err := q.Symbols(SymbolFilter{PathPrefix: &storePrefix}, Sort{}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		assert.Greater(t, result.TotalCount, 0, "should find symbols in internal/store/")
 		// All results should have file paths under internal/store/
@@ -597,14 +597,14 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 
 	t.Run("Pagination_Across_Real_Data", func(t *testing.T) {
 		// Get total count
-		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		total := all.TotalCount
 
 		// Page through results and collect all names
 		var allNames []string
 		for offset := 0; offset < total; offset += 10 {
-			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: 10})
+			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: intP(10)})
 			require.NoError(t, err)
 			assert.Equal(t, total, page.TotalCount, "total count should be stable across pages")
 			for _, item := range page.Items {
@@ -615,7 +615,7 @@ func TestDiscovery_SelfIndex(t *testing.T) {
 	})
 
 	t.Run("Sort_RefCount_Real_Data", func(t *testing.T) {
-		result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: 10})
+		result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: intP(10)})
 		require.NoError(t, err)
 		// Results should be in descending ref count order
 		for i := 1; i < len(result.Items); i++ {
@@ -730,7 +730,7 @@ func Validate(s *Server) bool {
 		assert.Equal(t, 3, files.TotalCount)
 
 		// New functions should be discoverable
-		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: 100})
+		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: intP(100)})
 		require.NoError(t, err)
 		assert.True(t, containsSymbolNamed(funcs.Items, "FormatAddr"), "new function should appear")
 		assert.True(t, containsSymbolNamed(funcs.Items, "Validate"), "new function should appear")
@@ -870,7 +870,7 @@ func FormatAddr(host string, port int) string {
 			"kept function should persist")
 
 		// Total function count should have decreased
-		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: 100})
+		funcs, err := q.Symbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{Limit: intP(100)})
 		require.NoError(t, err)
 		assert.False(t, containsSymbolNamed(funcs.Items, "Validate"))
 	})
@@ -884,13 +884,13 @@ func FormatAddr(host string, port int) string {
 		assert.Equal(t, 3, files.TotalCount)
 
 		// Pagination should be consistent with total
-		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: 500})
+		all, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Limit: intP(500)})
 		require.NoError(t, err)
 		total := all.TotalCount
 
 		var collected int
 		for offset := 0; offset < total; offset += 5 {
-			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: 5})
+			page, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: offset, Limit: intP(5)})
 			require.NoError(t, err)
 			assert.Equal(t, total, page.TotalCount)
 			collected += len(page.Items)
@@ -898,7 +898,7 @@ func FormatAddr(host string, port int) string {
 		assert.Equal(t, total, collected, "pagination should cover all symbols")
 
 		// Sort by ref count should still work
-		sorted, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: 10})
+		sorted, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByRefCount, Order: Desc}, Pagination{Limit: intP(10)})
 		require.NoError(t, err)
 		for i := 1; i < len(sorted.Items); i++ {
 			assert.GreaterOrEqual(t, sorted.Items[i-1].RefCount, sorted.Items[i].RefCount)

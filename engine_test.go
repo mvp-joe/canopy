@@ -333,7 +333,7 @@ func TestNewQueryBuilder(t *testing.T) {
 	assert.Nil(t, sym)
 
 	// Discovery queries should also work on an empty DB.
-	result, err := qb.Symbols(SymbolFilter{}, Sort{}, Pagination{Limit: 10})
+	result, err := qb.Symbols(SymbolFilter{}, Sort{}, Pagination{Limit: intP(10)})
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.TotalCount)
 	assert.Empty(t, result.Items)

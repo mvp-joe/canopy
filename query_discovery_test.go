@@ -78,11 +78,12 @@ func TestPagination_Normalize(t *testing.T) {
 		input    Pagination
 		expected Pagination
 	}{
-		{"zero value uses defaults", Pagination{}, Pagination{Offset: 0, Limit: 50}},
-		{"negative offset becomes 0", Pagination{Offset: -5, Limit: 10}, Pagination{Offset: 0, Limit: 10}},
-		{"zero limit uses default", Pagination{Offset: 0, Limit: 0}, Pagination{Offset: 0, Limit: 50}},
-		{"exceeding max limit capped", Pagination{Offset: 0, Limit: 1000}, Pagination{Offset: 0, Limit: 500}},
-		{"valid values unchanged", Pagination{Offset: 10, Limit: 20}, Pagination{Offset: 10, Limit: 20}},
+		{"zero value uses defaults", Pagination{}, Pagination{Offset: 0, Limit: intP(50)}},
+		{"negative offset becomes 0", Pagination{Offset: -5, Limit: intP(10)}, Pagination{Offset: 0, Limit: intP(10)}},
+		{"nil limit uses default", Pagination{Offset: 0, Limit: nil}, Pagination{Offset: 0, Limit: intP(50)}},
+		{"explicit zero limit stays zero", Pagination{Offset: 0, Limit: intP(0)}, Pagination{Offset: 0, Limit: intP(0)}},
+		{"exceeding max limit capped", Pagination{Offset: 0, Limit: intP(1000)}, Pagination{Offset: 0, Limit: intP(500)}},
+		{"valid values unchanged", Pagination{Offset: 10, Limit: intP(20)}, Pagination{Offset: 10, Limit: intP(20)}},
 	}
 
 	for _, tt := range tests {
@@ -278,7 +279,7 @@ func TestSymbols_Pagination(t *testing.T) {
 	}
 
 	// First page
-	result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 0, Limit: 2})
+	result, err := q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 0, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)
@@ -286,7 +287,7 @@ func TestSymbols_Pagination(t *testing.T) {
 	assert.Equal(t, "Sym1", result.Items[1].Name)
 
 	// Second page
-	result, err = q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 2, Limit: 2})
+	result, err = q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 2, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)
@@ -294,7 +295,7 @@ func TestSymbols_Pagination(t *testing.T) {
 	assert.Equal(t, "Sym3", result.Items[1].Name)
 
 	// Last page (partial)
-	result, err = q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 4, Limit: 2})
+	result, err = q.Symbols(SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 4, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 1)
@@ -606,7 +607,7 @@ func TestFiles_Pagination(t *testing.T) {
 		insertFile(t, s, fmt.Sprintf("file%d.go", i), "go")
 	}
 
-	result, err := q.Files("", "", Sort{Field: SortByFile, Order: Asc}, Pagination{Offset: 0, Limit: 2})
+	result, err := q.Files("", "", Sort{Field: SortByFile, Order: Asc}, Pagination{Offset: 0, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)
@@ -869,7 +870,7 @@ func TestSearchSymbols_Pagination(t *testing.T) {
 		insertSymbol(t, s, &fID, fmt.Sprintf("Get%d", i), "function", "public", nil)
 	}
 
-	result, err := q.SearchSymbols("Get*", SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 0, Limit: 2})
+	result, err := q.SearchSymbols("Get*", SymbolFilter{}, Sort{Field: SortByName, Order: Asc}, Pagination{Offset: 0, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)

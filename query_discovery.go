@@ -12,8 +12,8 @@ import (
 
 // Pagination controls offset+limit paging on list/search results.
 type Pagination struct {
-	Offset int // skip this many results (default 0)
-	Limit  int // max results to return (default 50, max 500)
+	Offset int  // skip this many results (default 0)
+	Limit  *int // max results to return; nil = default (50), 0 = return nothing, max 500
 }
 
 const (
@@ -26,14 +26,19 @@ func (p Pagination) normalize() Pagination {
 	if p.Offset < 0 {
 		p.Offset = 0
 	}
-	if p.Limit <= 0 {
-		p.Limit = defaultLimit
+	if p.Limit == nil {
+		p.Limit = intP(defaultLimit)
 	}
-	if p.Limit > maxLimit {
-		p.Limit = maxLimit
+	if *p.Limit < 0 {
+		p.Limit = intP(defaultLimit)
+	}
+	if *p.Limit > maxLimit {
+		p.Limit = intP(maxLimit)
 	}
 	return p
 }
+
+func intP(v int) *int { return &v }
 
 // SortField specifies how to order results.
 type SortField string
@@ -241,7 +246,7 @@ func (q *QueryBuilder) Symbols(filter SymbolFilter, sort Sort, page Pagination) 
 		prefixSymbolCols("s"), whereClause, groupByClause, havingClause, orderCol, orderDir,
 	)
 	dataArgs := append(append([]any{}, args...), havingArgs...)
-	dataArgs = append(dataArgs, page.Limit, page.Offset)
+	dataArgs = append(dataArgs, *page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {
@@ -304,7 +309,7 @@ func (q *QueryBuilder) Files(pathPrefix string, language string, sort Sort, page
 		`SELECT id, path, language, hash, line_count, last_indexed FROM files %s ORDER BY %s %s LIMIT ? OFFSET ?`,
 		whereClause, orderCol, orderDir,
 	)
-	dataArgs := append(append([]any{}, args...), page.Limit, page.Offset)
+	dataArgs := append(append([]any{}, args...), *page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {
@@ -448,7 +453,7 @@ func (q *QueryBuilder) SearchSymbols(pattern string, filter SymbolFilter, sort S
 		prefixSymbolCols("s"), whereClause, groupByClause, havingClause, orderCol, orderDir,
 	)
 	dataArgs := append(append([]any{}, args...), havingArgs...)
-	dataArgs = append(dataArgs, page.Limit, page.Offset)
+	dataArgs = append(dataArgs, *page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {

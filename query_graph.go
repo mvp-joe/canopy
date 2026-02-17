@@ -302,7 +302,7 @@ type HotspotResult struct {
 // Hardcoded exclusion of kinds "package", "module", "namespace" (never
 // meaningfully referenced). Supports the same SymbolFilter and Pagination
 // as Symbols().
-func (q *QueryBuilder) UnusedSymbols(filter SymbolFilter, page Pagination) (*PagedResult[SymbolResult], error) {
+func (q *QueryBuilder) UnusedSymbols(filter SymbolFilter, sort Sort, page Pagination) (*PagedResult[SymbolResult], error) {
 	page = page.normalize()
 
 	var where []string
@@ -357,6 +357,9 @@ func (q *QueryBuilder) UnusedSymbols(filter SymbolFilter, page Pagination) (*Pag
 
 	// Data query -- ref_count and external_ref_count are always 0 for unused symbols,
 	// but we use the standard scan to keep SymbolResult consistent.
+	orderCol := symbolSortColumn(sort.Field)
+	orderDir := sortDirection(sort.Order)
+
 	dataSQL := fmt.Sprintf(
 		`SELECT %s, COALESCE(f.path, '') AS file_path,
 			0 AS ref_count,
@@ -364,11 +367,11 @@ func (q *QueryBuilder) UnusedSymbols(filter SymbolFilter, page Pagination) (*Pag
 		 FROM symbols s
 		 LEFT JOIN files f ON s.file_id = f.id
 		 %s
-		 ORDER BY s.name ASC
+		 ORDER BY %s %s
 		 LIMIT ? OFFSET ?`,
-		prefixSymbolCols("s"), whereClause,
+		prefixSymbolCols("s"), whereClause, orderCol, orderDir,
 	)
-	dataArgs := append(append([]any{}, args...), page.Limit, page.Offset)
+	dataArgs := append(append([]any{}, args...), *page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {

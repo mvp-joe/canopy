@@ -155,18 +155,24 @@ func extract_params(sym_id, params_node, is_receiver) {
       type_expr = node_text(tn)
     }
 
-    nn := node_child(param, "name")
-    if nn != nil {
-      insert_function_param({
-        symbol_id: sym_id,
-        name: node_text(nn),
-        ordinal: ordinal,
-        type_expr: type_expr,
-        is_receiver: is_receiver,
-        is_return: false,
-      })
-      ordinal = ordinal + 1
+    // Use a query to find ALL name children — handles Go shorthand
+    // syntax like "a, b int" where one parameter_declaration has
+    // multiple name fields.
+    name_matches := query("(parameter_declaration name: (identifier) @name)", param)
+    if len(name_matches) > 0 {
+      for _, nm := range name_matches {
+        insert_function_param({
+          symbol_id: sym_id,
+          name: node_text(nm["name"]),
+          ordinal: ordinal,
+          type_expr: type_expr,
+          is_receiver: is_receiver,
+          is_return: false,
+        })
+        ordinal = ordinal + 1
+      }
     } else {
+      // Unnamed parameter (e.g., just a type with no name).
       insert_function_param({
         symbol_id: sym_id,
         name: "",

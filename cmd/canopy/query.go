@@ -172,7 +172,7 @@ func outputError(command string, err error) error {
 // buildPagination creates a Pagination from CLI flags.
 func buildPagination() canopy.Pagination {
 	return canopy.Pagination{
-		Limit:  flagLimit,
+		Limit:  &flagLimit,
 		Offset: flagOffset,
 	}
 }
@@ -183,7 +183,10 @@ func paginateSlice[T any](items []T) ([]T, int) {
 	total := len(items)
 	offset := flagOffset
 	limit := flagLimit
-	if limit <= 0 {
+	if limit == 0 {
+		return []T{}, total
+	}
+	if limit < 0 {
 		limit = 50
 	}
 	if limit > 500 {

@@ -72,7 +72,7 @@ func runTypeHierarchy(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	cliTH := typeHierarchyToCLI(th)
+	cliTH := typeHierarchyToCLI(th, s)
 	one := 1
 	return outputResult(CLIResult{
 		Command:    "type-hierarchy",
@@ -136,7 +136,7 @@ func runExtensions(cmd *cobra.Command, args []string) error {
 
 	cliBindings := make([]CLIExtensionBinding, len(bindings))
 	for i, b := range bindings {
-		cliBindings[i] = extensionBindingToCLI(b)
+		cliBindings[i] = extensionBindingToCLI(b, s)
 	}
 
 	paged, totalCount := paginateSlice(cliBindings)
@@ -192,7 +192,7 @@ func runReexports(cmd *cobra.Command, args []string) error {
 
 // --- Converters ---
 
-func typeHierarchyToCLI(th *canopy.TypeHierarchy) CLITypeHierarchy {
+func typeHierarchyToCLI(th *canopy.TypeHierarchy, s *store.Store) CLITypeHierarchy {
 	cli := CLITypeHierarchy{
 		Symbol: symbolResultToCLI(th.Symbol),
 	}
@@ -231,19 +231,21 @@ func typeHierarchyToCLI(th *canopy.TypeHierarchy) CLITypeHierarchy {
 
 	cli.Extensions = make([]CLIExtensionBinding, len(th.Extensions))
 	for i, b := range th.Extensions {
-		cli.Extensions[i] = extensionBindingToCLI(b)
+		cli.Extensions[i] = extensionBindingToCLI(b, s)
 	}
 
 	return cli
 }
 
-func extensionBindingToCLI(b *store.ExtensionBinding) CLIExtensionBinding {
-	return CLIExtensionBinding{
-		MemberSymbolID:       b.MemberSymbolID,
-		ExtendedTypeExpr:     b.ExtendedTypeExpr,
-		ExtendedTypeSymbolID: b.ExtendedTypeSymbolID,
-		Kind:                 b.Kind,
-		Constraints:          b.Constraints,
-		IsDefaultImpl:        b.IsDefaultImpl,
+func extensionBindingToCLI(b *store.ExtensionBinding, s *store.Store) CLIExtensionBinding {
+	cli := CLIExtensionBinding{
+		TypeSymbolID:   b.ExtendedTypeSymbolID,
+		MemberSymbolID: b.MemberSymbolID,
+		Kind:           b.Kind,
 	}
+	// Look up the member symbol's file ID.
+	if sym, err := s.SymbolByID(b.MemberSymbolID); err == nil && sym != nil {
+		cli.SourceFileID = sym.FileID
+	}
+	return cli
 }

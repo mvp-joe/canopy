@@ -717,3 +717,111 @@ func TestQuery_Callers_MethodCall(t *testing.T) {
 	}
 	assert.True(t, found, "main should be listed as a caller of Handle")
 }
+
+func TestQuery_TransitiveCallers_DepthFieldName(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	bin, fixtureDir := indexMethodCallFixture(t)
+
+	// Find the Handle method to use as root for transitive-callers.
+	symbolResult := runQuery(t, bin, fixtureDir, "symbol-at", "types.go", "6", "19")
+	require.NotNil(t, symbolResult["results"])
+	sym := symbolResult["results"].(map[string]any)
+	symbolID := int64(sym["id"].(float64))
+
+	result := runQuery(t, bin, fixtureDir, "transitive-callers", "--symbol", formatInt64(symbolID))
+	assert.Equal(t, "transitive-callers", result["command"])
+	assert.Empty(t, result["error"])
+
+	graph, ok := result["results"].(map[string]any)
+	require.True(t, ok, "results should be a call graph object")
+
+	// Per spec: top-level field must be "depth", NOT "max_depth".
+	assert.Contains(t, graph, "depth", "call graph should have 'depth' field per spec")
+	assert.NotContains(t, graph, "max_depth", "call graph should NOT have 'max_depth' — spec says 'depth'")
+}
+
+func TestQuery_Extensions_FieldNames(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	bin, fixtureDir := indexMethodCallFixture(t)
+
+	// Find the Server struct symbol (line 2, col 5 in types.go).
+	symbolResult := runQuery(t, bin, fixtureDir, "symbol-at", "types.go", "2", "5")
+	require.NotNil(t, symbolResult["results"])
+	sym := symbolResult["results"].(map[string]any)
+	symbolID := int64(sym["id"].(float64))
+
+	result := runQuery(t, bin, fixtureDir, "extensions", "--symbol", formatInt64(symbolID))
+	assert.Equal(t, "extensions", result["command"])
+	assert.Empty(t, result["error"])
+
+	results, ok := result["results"].([]any)
+	require.True(t, ok, "results should be an array")
+
+	// If there are extension bindings, verify field names match the spec.
+	for _, r := range results {
+		ext := r.(map[string]any)
+		// Per spec: fields should be type_symbol_id, member_symbol_id, kind, source_file_id.
+		assert.Contains(t, ext, "type_symbol_id", "should have 'type_symbol_id' per spec")
+		assert.Contains(t, ext, "member_symbol_id", "should have 'member_symbol_id' per spec")
+		assert.Contains(t, ext, "kind", "should have 'kind' per spec")
+		assert.Contains(t, ext, "source_file_id", "should have 'source_file_id' per spec")
+		assert.NotContains(t, ext, "extended_type_symbol_id", "should NOT have 'extended_type_symbol_id'")
+		assert.NotContains(t, ext, "extended_type_expr", "should NOT have 'extended_type_expr'")
+	}
+}
+
+func TestQuery_Unused_SortAndOrder(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	bin, fixtureDir, _ := indexFixture(t)
+
+	t.Run("order desc reverses results", func(t *testing.T) {
+		ascResult := runQuery(t, bin, fixtureDir, "unused", "--sort", "name", "--order", "asc")
+		descResult := runQuery(t, bin, fixtureDir, "unused", "--sort", "name", "--order", "desc")
+
+		ascItems, ok := ascResult["results"].([]any)
+		require.True(t, ok)
+		descItems, ok := descResult["results"].([]any)
+		require.True(t, ok)
+
+		if len(ascItems) >= 2 && len(descItems) >= 2 {
+			ascFirst := ascItems[0].(map[string]any)["name"].(string)
+			descFirst := descItems[0].(map[string]any)["name"].(string)
+			assert.NotEqual(t, ascFirst, descFirst, "--order desc should reverse the order")
+		}
+	})
+
+	t.Run("sort kind groups by kind", func(t *testing.T) {
+		result := runQuery(t, bin, fixtureDir, "unused", "--sort", "kind", "--order", "asc")
+		items, ok := result["results"].([]any)
+		require.True(t, ok)
+
+		// Verify kinds are in non-decreasing order.
+		var lastKind string
+		for _, item := range items {
+			sym := item.(map[string]any)
+			kind := sym["kind"].(string)
+			assert.GreaterOrEqual(t, kind, lastKind, "kinds should be in ascending order")
+			lastKind = kind
+		}
+	})
+}
+
+func TestQuery_Unused_LimitZero(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+	bin, fixtureDir, _ := indexFixture(t)
+
+	result := runQuery(t, bin, fixtureDir, "unused", "--limit", "0")
+	assert.Equal(t, "unused", result["command"])
+
+	items, ok := result["results"].([]any)
+	require.True(t, ok, "results should be an array")
+	assert.Equal(t, 0, len(items), "--limit 0 should return 0 results")
+}

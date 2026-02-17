@@ -257,10 +257,17 @@ func formatTypeHierarchyText(w io.Writer, th CLITypeHierarchy) {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Extensions:")
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  MEMBER_SYMBOL_ID\tKIND\tEXTENDED_TYPE_EXPR\tCONSTRAINTS")
+		fmt.Fprintln(tw, "  TYPE_SYMBOL_ID\tMEMBER_SYMBOL_ID\tKIND\tSOURCE_FILE_ID")
 		for _, b := range th.Extensions {
-			fmt.Fprintf(tw, "  %d\t%s\t%s\t%s\n",
-				b.MemberSymbolID, b.Kind, b.ExtendedTypeExpr, b.Constraints)
+			var typeID, fileID int64
+			if b.TypeSymbolID != nil {
+				typeID = *b.TypeSymbolID
+			}
+			if b.SourceFileID != nil {
+				fileID = *b.SourceFileID
+			}
+			fmt.Fprintf(tw, "  %d\t%d\t%s\t%d\n",
+				typeID, b.MemberSymbolID, b.Kind, fileID)
 		}
 		tw.Flush()
 	}
@@ -269,10 +276,17 @@ func formatTypeHierarchyText(w io.Writer, th CLITypeHierarchy) {
 // formatExtensionBindingsText formats CLIExtensionBinding results as aligned columns.
 func formatExtensionBindingsText(w io.Writer, bindings []CLIExtensionBinding) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "MEMBER_SYMBOL_ID\tKIND\tEXTENDED_TYPE_EXPR\tCONSTRAINTS")
+	fmt.Fprintln(tw, "TYPE_SYMBOL_ID\tMEMBER_SYMBOL_ID\tKIND\tSOURCE_FILE_ID")
 	for _, b := range bindings {
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\n",
-			b.MemberSymbolID, b.Kind, b.ExtendedTypeExpr, b.Constraints)
+		var typeID, fileID int64
+		if b.TypeSymbolID != nil {
+			typeID = *b.TypeSymbolID
+		}
+		if b.SourceFileID != nil {
+			fileID = *b.SourceFileID
+		}
+		fmt.Fprintf(tw, "%d\t%d\t%s\t%d\n",
+			typeID, b.MemberSymbolID, b.Kind, fileID)
 	}
 	tw.Flush()
 }
@@ -290,7 +304,7 @@ func formatReexportsText(w io.Writer, reexports []CLIReexport) {
 // formatCallGraphText formats a CLICallGraph as readable text.
 func formatCallGraphText(w io.Writer, g CLICallGraph) {
 	fmt.Fprintf(w, "Root: %d\n", g.Root)
-	fmt.Fprintf(w, "Max Depth: %d\n\n", g.MaxDepth)
+	fmt.Fprintf(w, "Depth: %d\n\n", g.Depth)
 
 	if len(g.Nodes) > 0 {
 		fmt.Fprintln(w, "Nodes:")

@@ -423,7 +423,7 @@ func TestUnusedSymbols_ReturnsZeroRefSymbols(t *testing.T) {
 	// Add a reference to sym1 only
 	insertResolvedRef(t, s, fID, sym1)
 
-	result, err := q.UnusedSymbols(SymbolFilter{}, Pagination{})
+	result, err := q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.TotalCount)
 	require.Len(t, result.Items, 1)
@@ -440,7 +440,7 @@ func TestUnusedSymbols_ExcludesPackageModuleNamespace(t *testing.T) {
 	insertSymbol(t, s, &fID, "myns", "namespace", "public", nil)
 	insertSymbol(t, s, &fID, "UnusedFunc", "function", "public", nil)
 
-	result, err := q.UnusedSymbols(SymbolFilter{}, Pagination{})
+	result, err := q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	// Only UnusedFunc should appear, package/module/namespace excluded
 	assert.Equal(t, 1, result.TotalCount)
@@ -455,7 +455,7 @@ func TestUnusedSymbols_FilterByKind(t *testing.T) {
 	insertSymbol(t, s, &fID, "UnusedFunc", "function", "public", nil)
 	insertSymbol(t, s, &fID, "UnusedStruct", "struct", "public", nil)
 
-	result, err := q.UnusedSymbols(SymbolFilter{Kinds: []string{"function"}}, Pagination{})
+	result, err := q.UnusedSymbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.TotalCount)
 	require.Len(t, result.Items, 1)
@@ -469,7 +469,7 @@ func TestUnusedSymbols_FilterByVisibility(t *testing.T) {
 	insertSymbol(t, s, &fID, "PublicUnused", "function", "public", nil)
 	insertSymbol(t, s, &fID, "privateUnused", "function", "private", nil)
 
-	result, err := q.UnusedSymbols(SymbolFilter{Visibility: strPtr("private")}, Pagination{})
+	result, err := q.UnusedSymbols(SymbolFilter{Visibility: strPtr("private")}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.TotalCount)
 	require.Len(t, result.Items, 1)
@@ -484,7 +484,7 @@ func TestUnusedSymbols_FilterByPathPrefix(t *testing.T) {
 	insertSymbol(t, s, &fID1, "StoreHelper", "function", "public", nil)
 	insertSymbol(t, s, &fID2, "RuntimeHelper", "function", "public", nil)
 
-	result, err := q.UnusedSymbols(SymbolFilter{PathPrefix: strPtr("internal/store")}, Pagination{})
+	result, err := q.UnusedSymbols(SymbolFilter{PathPrefix: strPtr("internal/store")}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.TotalCount)
 	require.Len(t, result.Items, 1)
@@ -500,19 +500,19 @@ func TestUnusedSymbols_Pagination(t *testing.T) {
 	}
 
 	// First page
-	result, err := q.UnusedSymbols(SymbolFilter{}, Pagination{Offset: 0, Limit: 2})
+	result, err := q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{Offset: 0, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)
 
 	// Second page
-	result, err = q.UnusedSymbols(SymbolFilter{}, Pagination{Offset: 2, Limit: 2})
+	result, err = q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{Offset: 2, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 2)
 
 	// Last page (partial)
-	result, err = q.UnusedSymbols(SymbolFilter{}, Pagination{Offset: 4, Limit: 2})
+	result, err = q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{Offset: 4, Limit: intP(2)})
 	require.NoError(t, err)
 	assert.Equal(t, 5, result.TotalCount)
 	assert.Len(t, result.Items, 1)
@@ -527,12 +527,12 @@ func TestUnusedSymbols_TotalCountReflectsFilter(t *testing.T) {
 	insertSymbol(t, s, &fID, "UnusedStruct", "struct", "public", nil)
 
 	// Without kind filter: 3 total unused
-	all, err := q.UnusedSymbols(SymbolFilter{}, Pagination{})
+	all, err := q.UnusedSymbols(SymbolFilter{}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 3, all.TotalCount)
 
 	// With kind filter: TotalCount should be 2 (only functions)
-	filtered, err := q.UnusedSymbols(SymbolFilter{Kinds: []string{"function"}}, Pagination{})
+	filtered, err := q.UnusedSymbols(SymbolFilter{Kinds: []string{"function"}}, Sort{}, Pagination{})
 	require.NoError(t, err)
 	assert.Equal(t, 2, filtered.TotalCount)
 	assert.Len(t, filtered.Items, 2)

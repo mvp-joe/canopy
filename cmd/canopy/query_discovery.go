@@ -88,6 +88,7 @@ func runSymbols(cmd *cobra.Command, args []string) error {
 		cliSyms[i] = symbolResultToCLI(sr)
 	}
 
+
 	return outputResult(CLIResult{
 		Command:    "symbols",
 		Results:    cliSyms,
@@ -131,6 +132,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		cliSyms[i] = symbolResultToCLI(sr)
 	}
 
+
 	return outputResult(CLIResult{
 		Command:    "search",
 		Results:    cliSyms,
@@ -172,6 +174,7 @@ func runFiles(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+
 	return outputResult(CLIResult{
 		Command:    "files",
 		Results:    cliFiles,
@@ -209,6 +212,7 @@ func runPackages(cmd *cobra.Command, args []string) error {
 	for i, sr := range result.Items {
 		cliSyms[i] = symbolResultToCLI(sr)
 	}
+
 
 	return outputResult(CLIResult{
 		Command:    "packages",

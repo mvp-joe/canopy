@@ -622,6 +622,46 @@ func Add(a int, b int) int {
 	assert.True(t, returnParams[0].IsReturn)
 }
 
+func TestExtract_FunctionParams_Shorthand(t *testing.T) {
+	env := newTestEnv(t)
+	fileID := env.extractGoSource(`package main
+
+func Add(a, b int) int {
+	return a + b
+}
+`)
+	syms, err := env.store.SymbolsByFile(fileID)
+	require.NoError(t, err)
+
+	var fnSym *store.Symbol
+	for _, s := range syms {
+		if s.Kind == "function" {
+			fnSym = s
+			break
+		}
+	}
+	require.NotNil(t, fnSym)
+
+	params, err := env.store.FunctionParams(fnSym.ID)
+	require.NoError(t, err)
+
+	// Shorthand "a, b int" should produce two params with type "int".
+	var regularParams []*store.FunctionParam
+	for _, p := range params {
+		if !p.IsReturn {
+			regularParams = append(regularParams, p)
+		}
+	}
+
+	require.Len(t, regularParams, 2, "shorthand 'a, b int' should produce 2 params")
+	assert.Equal(t, "a", regularParams[0].Name)
+	assert.Equal(t, "int", regularParams[0].TypeExpr)
+	assert.Equal(t, 0, regularParams[0].Ordinal)
+	assert.Equal(t, "b", regularParams[1].Name)
+	assert.Equal(t, "int", regularParams[1].TypeExpr)
+	assert.Equal(t, 1, regularParams[1].Ordinal)
+}
+
 func TestExtract_ReturnTypes(t *testing.T) {
 	env := newTestEnv(t)
 	fileID := env.extractGoSource(`package main

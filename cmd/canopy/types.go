@@ -149,12 +149,10 @@ type CLITypeRelation struct {
 
 // CLIExtensionBinding is a JSON-friendly extension binding.
 type CLIExtensionBinding struct {
-	MemberSymbolID       int64  `json:"member_symbol_id"`
-	ExtendedTypeExpr     string `json:"extended_type_expr"`
-	ExtendedTypeSymbolID *int64 `json:"extended_type_symbol_id,omitempty"`
-	Kind                 string `json:"kind"`
-	Constraints          string `json:"constraints,omitempty"`
-	IsDefaultImpl        bool   `json:"is_default_impl,omitempty"`
+	TypeSymbolID   *int64 `json:"type_symbol_id,omitempty"`
+	MemberSymbolID int64  `json:"member_symbol_id"`
+	Kind           string `json:"kind"`
+	SourceFileID   *int64 `json:"source_file_id,omitempty"`
 }
 
 // CLIReexport is a JSON-friendly reexport.
@@ -180,7 +178,7 @@ type CLICallGraph struct {
 	Root     int64              `json:"root"`
 	Nodes    []CLICallGraphNode `json:"nodes"`
 	Edges    []CLICallGraphEdge `json:"edges"`
-	MaxDepth int                `json:"max_depth"`
+	Depth    int                `json:"depth"`
 }
 
 // CLICallGraphNode is a node in a transitive call graph.
