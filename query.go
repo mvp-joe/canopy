@@ -219,34 +219,26 @@ func (q *QueryBuilder) Dependents(source string) ([]*store.Import, error) {
 
 // symbolLocation resolves a symbol ID to its file path and position.
 func (q *QueryBuilder) symbolLocation(symbolID int64) (*Location, error) {
-	var fileID sql.NullInt64
-	var startLine, startCol, endLine, endCol int
-	err := q.store.DB().QueryRow(
-		`SELECT file_id, start_line, start_col, end_line, end_col
-		 FROM symbols WHERE id = ?`, symbolID,
-	).Scan(&fileID, &startLine, &startCol, &endLine, &endCol)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	sym, err := q.store.SymbolByID(symbolID)
 	if err != nil {
 		return nil, err
 	}
-	if !fileID.Valid {
-		return nil, nil // multi-file symbol without a specific file
+	if sym == nil || sym.FileID == nil {
+		return nil, nil
 	}
 
 	var path string
-	err = q.store.DB().QueryRow("SELECT path FROM files WHERE id = ?", fileID.Int64).Scan(&path)
+	err = q.store.DB().QueryRow("SELECT path FROM files WHERE id = ?", *sym.FileID).Scan(&path)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Location{
 		File:      path,
-		StartLine: startLine,
-		StartCol:  startCol,
-		EndLine:   endLine,
-		EndCol:    endCol,
+		StartLine: sym.StartLine,
+		StartCol:  sym.StartCol,
+		EndLine:   sym.EndLine,
+		EndCol:    sym.EndCol,
 	}, nil
 }
 

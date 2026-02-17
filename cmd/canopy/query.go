@@ -47,6 +47,18 @@ func init() {
 	queryCmd.AddCommand(packageSummaryCmd)
 	queryCmd.AddCommand(depsCmd)
 	queryCmd.AddCommand(dependentsCmd)
+	queryCmd.AddCommand(symbolDetailCmd)
+	queryCmd.AddCommand(scopeAtCmd)
+	queryCmd.AddCommand(typeHierarchyCmd)
+	queryCmd.AddCommand(implementsCmd)
+	queryCmd.AddCommand(extensionsCmd)
+	queryCmd.AddCommand(reexportsCmd)
+	queryCmd.AddCommand(transitiveCallersCmd)
+	queryCmd.AddCommand(transitiveCalleesCmd)
+	queryCmd.AddCommand(packageGraphCmd)
+	queryCmd.AddCommand(circularDepsCmd)
+	queryCmd.AddCommand(unusedCmd)
+	queryCmd.AddCommand(hotspotsCmd)
 }
 
 // --- Helpers ---
@@ -96,8 +108,8 @@ func parseIntArg(value, name string) (int, error) {
 // resolveSymbolID resolves a symbol ID from either positional args (<file> <line> <col>) or --symbol flag.
 // Returns the symbol ID and the QueryBuilder to use.
 func resolveSymbolID(cmd *cobra.Command, args []string, qb *canopy.QueryBuilder) (int64, error) {
-	symbolFlag, _ := cmd.Flags().GetInt64("symbol")
-	if symbolFlag != 0 {
+	if cmd.Flags().Changed("symbol") {
+		symbolFlag, _ := cmd.Flags().GetInt64("symbol")
 		return symbolFlag, nil
 	}
 

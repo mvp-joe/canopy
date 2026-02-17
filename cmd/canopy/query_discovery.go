@@ -30,6 +30,11 @@ func init() {
 	symbolsCmd.Flags().StringVar(&flagFile, "file", "", "filter by file path")
 	symbolsCmd.Flags().StringVar(&flagVisibility, "visibility", "", "filter by visibility (public, private)")
 	symbolsCmd.Flags().StringVar(&flagPathPrefix, "path-prefix", "", "filter by file path prefix")
+	symbolsCmd.Flags().Int("ref-count-min", 0, "minimum reference count")
+	symbolsCmd.Flags().Int("ref-count-max", 0, "maximum reference count")
+
+	searchCmd.Flags().Int("ref-count-min", 0, "minimum reference count")
+	searchCmd.Flags().Int("ref-count-max", 0, "maximum reference count")
 }
 
 func runSymbols(cmd *cobra.Command, args []string) error {
@@ -48,6 +53,14 @@ func runSymbols(cmd *cobra.Command, args []string) error {
 	}
 	if flagPathPrefix != "" {
 		filter.PathPrefix = &flagPathPrefix
+	}
+	if cmd.Flags().Changed("ref-count-min") {
+		v, _ := cmd.Flags().GetInt("ref-count-min")
+		filter.RefCountMin = intPtr(v)
+	}
+	if cmd.Flags().Changed("ref-count-max") {
+		v, _ := cmd.Flags().GetInt("ref-count-max")
+		filter.RefCountMax = intPtr(v)
 	}
 	if flagFile != "" {
 		resolvedFile, resolveErr := resolveFilePath(flagFile)
@@ -97,8 +110,18 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 	defer s.Close()
 
+	filter := canopy.SymbolFilter{}
+	if cmd.Flags().Changed("ref-count-min") {
+		v, _ := cmd.Flags().GetInt("ref-count-min")
+		filter.RefCountMin = intPtr(v)
+	}
+	if cmd.Flags().Changed("ref-count-max") {
+		v, _ := cmd.Flags().GetInt("ref-count-max")
+		filter.RefCountMax = intPtr(v)
+	}
+
 	qb := canopy.NewQueryBuilder(s)
-	result, err := qb.SearchSymbols(args[0], canopy.SymbolFilter{}, buildSort(), buildPagination())
+	result, err := qb.SearchSymbols(args[0], filter, buildSort(), buildPagination())
 	if err != nil {
 		return outputError("search", err)
 	}
@@ -383,3 +406,6 @@ func runDependents(cmd *cobra.Command, args []string) error {
 		TotalCount: &depCount,
 	})
 }
+
+// intPtr returns a pointer to an int value.
+func intPtr(i int) *int { return &i }

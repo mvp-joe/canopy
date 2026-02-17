@@ -37,7 +37,7 @@ Expands the QueryBuilder to expose all extraction and resolution data currently 
 
 ## Current Status
 
-Planning
+Complete (2026-02-17). Implemented autonomously via /spec:implement-all.
 
 ## Key Files
 

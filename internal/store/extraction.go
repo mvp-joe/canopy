@@ -56,6 +56,25 @@ func (s *Store) FilesByLanguage(language string) ([]*File, error) {
 	return files, rows.Err()
 }
 
+// AllFiles returns a map of file ID to file path for bulk resolution.
+func (s *Store) AllFiles() (map[int64]string, error) {
+	rows, err := s.db.Query("SELECT id, path FROM files")
+	if err != nil {
+		return nil, fmt.Errorf("all files: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[int64]string)
+	for rows.Next() {
+		var id int64
+		var path string
+		if err := rows.Scan(&id, &path); err != nil {
+			return nil, fmt.Errorf("all files: scan: %w", err)
+		}
+		result[id] = path
+	}
+	return result, rows.Err()
+}
+
 // --- Symbol operations ---
 
 func (s *Store) InsertSymbol(sym *Symbol) (int64, error) {
@@ -117,6 +136,19 @@ func (s *Store) querySymbols(query string, args ...any) ([]*Symbol, error) {
 		symbols = append(symbols, sym)
 	}
 	return symbols, rows.Err()
+}
+
+// SymbolByID returns a single symbol by ID. Returns nil, nil for sql.ErrNoRows.
+func (s *Store) SymbolByID(id int64) (*Symbol, error) {
+	row := s.db.QueryRow("SELECT "+SymbolCols+" FROM symbols WHERE id = ?", id)
+	sym, err := s.scanSymbol(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("symbol by id: %w", err)
+	}
+	return sym, nil
 }
 
 func (s *Store) SymbolsByFile(fileID int64) ([]*Symbol, error) {
@@ -202,6 +234,31 @@ func (s *Store) ScopeChain(scopeID int64) ([]*Scope, error) {
 		currentID = sc.ParentScopeID
 	}
 	return chain, nil
+}
+
+// ScopeAt finds the single innermost scope containing the given position.
+// Uses span-size ordering (smallest first) to pick the most specific scope.
+// Returns nil with no error if no scope contains the position.
+func (s *Store) ScopeAt(fileID int64, line, col int) (*Scope, error) {
+	row := s.db.QueryRow(
+		`SELECT `+scopeCols+` FROM scopes
+		 WHERE file_id = ?
+		   AND (start_line < ? OR (start_line = ? AND start_col <= ?))
+		   AND (end_line > ? OR (end_line = ? AND end_col >= ?))
+		 ORDER BY (end_line - start_line) ASC, (end_col - start_col) ASC
+		 LIMIT 1`,
+		fileID,
+		line, line, col,
+		line, line, col,
+	)
+	sc, err := s.scanScope(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scope at: %w", err)
+	}
+	return sc, nil
 }
 
 // --- Reference operations ---
@@ -297,6 +354,27 @@ func (s *Store) ImportsByFile(fileID int64) ([]*Import, error) {
 		if err := rows.Scan(&imp.ID, &imp.FileID, &imp.Source, &imp.ImportedName,
 			&imp.LocalAlias, &imp.Kind, &imp.Scope); err != nil {
 			return nil, fmt.Errorf("scan import: %w", err)
+		}
+		imports = append(imports, imp)
+	}
+	return imports, rows.Err()
+}
+
+// AllImports returns all imports across all files.
+func (s *Store) AllImports() ([]*Import, error) {
+	rows, err := s.db.Query(
+		"SELECT id, file_id, source, imported_name, local_alias, kind, scope FROM imports",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("all imports: %w", err)
+	}
+	defer rows.Close()
+	var imports []*Import
+	for rows.Next() {
+		imp := &Import{}
+		if err := rows.Scan(&imp.ID, &imp.FileID, &imp.Source, &imp.ImportedName,
+			&imp.LocalAlias, &imp.Kind, &imp.Scope); err != nil {
+			return nil, fmt.Errorf("all imports: scan: %w", err)
 		}
 		imports = append(imports, imp)
 	}

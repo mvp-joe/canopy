@@ -141,6 +141,12 @@ func (s *Store) queryCallEdges(query string, args ...any) ([]*CallEdge, error) {
 
 const callEdgeCols = `id, caller_symbol_id, callee_symbol_id, file_id, line, col`
 
+// AllCallEdges returns all call graph edges. Used for bulk-loading into
+// in-memory adjacency maps for transitive traversal.
+func (s *Store) AllCallEdges() ([]*CallEdge, error) {
+	return s.queryCallEdges("SELECT " + callEdgeCols + " FROM call_graph")
+}
+
 func (s *Store) CallersByCallee(calleeSymbolID int64) ([]*CallEdge, error) {
 	return s.queryCallEdges(
 		"SELECT "+callEdgeCols+" FROM call_graph WHERE callee_symbol_id = ?", calleeSymbolID,
@@ -253,14 +259,10 @@ func (s *Store) InsertTypeComposition(tc *TypeComposition) (int64, error) {
 	return id, nil
 }
 
-func (s *Store) TypeCompositions(compositeSymbolID int64) ([]*TypeComposition, error) {
-	rows, err := s.db.Query(
-		`SELECT id, composite_symbol_id, component_symbol_id, composition_kind
-		 FROM type_compositions WHERE composite_symbol_id = ?`,
-		compositeSymbolID,
-	)
+func (s *Store) queryTypeCompositions(query string, args ...any) ([]*TypeComposition, error) {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("type compositions: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 	var comps []*TypeComposition
@@ -272,4 +274,18 @@ func (s *Store) TypeCompositions(compositeSymbolID int64) ([]*TypeComposition, e
 		comps = append(comps, tc)
 	}
 	return comps, rows.Err()
+}
+
+const typeCompCols = `id, composite_symbol_id, component_symbol_id, composition_kind`
+
+func (s *Store) TypeCompositions(compositeSymbolID int64) ([]*TypeComposition, error) {
+	return s.queryTypeCompositions(
+		"SELECT "+typeCompCols+" FROM type_compositions WHERE composite_symbol_id = ?", compositeSymbolID,
+	)
+}
+
+func (s *Store) TypeComposedBy(componentSymbolID int64) ([]*TypeComposition, error) {
+	return s.queryTypeCompositions(
+		"SELECT "+typeCompCols+" FROM type_compositions WHERE component_symbol_id = ?", componentSymbolID,
+	)
 }

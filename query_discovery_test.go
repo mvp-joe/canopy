@@ -400,6 +400,127 @@ func TestSymbols_InvalidParentIDReturnsEmpty(t *testing.T) {
 }
 
 // =============================================================================
+// Symbols — RefCount Filters
+// =============================================================================
+
+func intPtr(i int) *int { return &i }
+
+func TestSymbols_RefCountMin_ExcludesZeroRefs(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	sym1 := insertSymbol(t, s, &fID, "Referenced", "function", "public", nil)
+	insertSymbol(t, s, &fID, "Unreferenced", "function", "public", nil)
+
+	insertResolvedRef(t, s, fID, sym1)
+
+	result, err := q.Symbols(SymbolFilter{RefCountMin: intPtr(1)}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.TotalCount)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "Referenced", result.Items[0].Name)
+}
+
+func TestSymbols_RefCountMax_ReturnsOnlyZeroRefs(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	sym1 := insertSymbol(t, s, &fID, "Referenced", "function", "public", nil)
+	insertSymbol(t, s, &fID, "Unreferenced", "function", "public", nil)
+
+	insertResolvedRef(t, s, fID, sym1)
+
+	result, err := q.Symbols(SymbolFilter{RefCountMax: intPtr(0)}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.TotalCount)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "Unreferenced", result.Items[0].Name)
+}
+
+func TestSymbols_RefCountRange(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	sym1 := insertSymbol(t, s, &fID, "Low", "function", "public", nil)    // 1 ref
+	sym2 := insertSymbol(t, s, &fID, "Mid", "function", "public", nil)    // 3 refs
+	sym3 := insertSymbol(t, s, &fID, "High", "function", "public", nil)   // 6 refs
+	insertSymbol(t, s, &fID, "Zero", "function", "public", nil)           // 0 refs
+
+	insertResolvedRef(t, s, fID, sym1)
+	for range 3 {
+		insertResolvedRef(t, s, fID, sym2)
+	}
+	for range 6 {
+		insertResolvedRef(t, s, fID, sym3)
+	}
+
+	result, err := q.Symbols(SymbolFilter{RefCountMin: intPtr(2), RefCountMax: intPtr(5)}, Sort{Field: SortByName, Order: Asc}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.TotalCount)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "Mid", result.Items[0].Name)
+}
+
+func TestSymbols_RefCountMin_NoMatch_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	insertSymbol(t, s, &fID, "Foo", "function", "public", nil)
+	insertSymbol(t, s, &fID, "Bar", "function", "public", nil)
+
+	result, err := q.Symbols(SymbolFilter{RefCountMin: intPtr(100)}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.TotalCount)
+	assert.Empty(t, result.Items)
+	assert.NotNil(t, result.Items)
+}
+
+func TestSymbols_RefCount_TotalCountReflectsFilter(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	sym1 := insertSymbol(t, s, &fID, "A", "function", "public", nil)
+	sym2 := insertSymbol(t, s, &fID, "B", "function", "public", nil)
+	insertSymbol(t, s, &fID, "C", "function", "public", nil) // 0 refs
+
+	insertResolvedRef(t, s, fID, sym1)
+	insertResolvedRef(t, s, fID, sym2)
+
+	// Without filter: 3 total
+	all, err := q.Symbols(SymbolFilter{}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 3, all.TotalCount)
+
+	// With RefCountMin=1: TotalCount should be 2, not 3
+	filtered, err := q.Symbols(SymbolFilter{RefCountMin: intPtr(1)}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 2, filtered.TotalCount)
+	assert.Len(t, filtered.Items, 2)
+}
+
+// =============================================================================
+// SearchSymbols — RefCount Filters
+// =============================================================================
+
+func TestSearchSymbols_RefCountMin_FiltersResults(t *testing.T) {
+	t.Parallel()
+	q, s := newTestQueryBuilder(t)
+	fID := insertFile(t, s, "main.go", "go")
+	sym1 := insertSymbol(t, s, &fID, "GetUser", "function", "public", nil)
+	insertSymbol(t, s, &fID, "GetAdmin", "function", "public", nil)
+
+	for range 3 {
+		insertResolvedRef(t, s, fID, sym1)
+	}
+
+	result, err := q.SearchSymbols("Get*", SymbolFilter{RefCountMin: intPtr(1)}, Sort{}, Pagination{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.TotalCount)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "GetUser", result.Items[0].Name)
+}
+
+// =============================================================================
 // Files
 // =============================================================================
 

@@ -230,7 +230,7 @@ func (q *QueryBuilder) CircularDependencies() ([][]string, error)
 func (q *QueryBuilder) UnusedSymbols(filter SymbolFilter, page Pagination) (*PagedResult[SymbolResult], error)
 
 // Hotspots returns the top-N most-referenced symbols with fan-in and fan-out
-// metrics. Sorts by total reference count descending.
+// metrics. Sorts by external reference count descending.
 // topN of 0 returns empty list. Negative returns error.
 func (q *QueryBuilder) Hotspots(topN int) ([]*HotspotResult, error)
 ```

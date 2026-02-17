@@ -84,6 +84,8 @@ type SymbolFilter struct {
 	FileID     *int64   // restrict to a single file
 	ParentID   *int64   // restrict to direct children of this symbol
 	PathPrefix *string  // restrict to symbols in files under this path
+	RefCountMin *int    // only symbols with ref_count >= this value
+	RefCountMax *int    // only symbols with ref_count <= this value
 }
 
 // --- Internal Helpers ---
@@ -186,11 +188,41 @@ func (q *QueryBuilder) Symbols(filter SymbolFilter, sort Sort, page Pagination) 
 		whereClause = "WHERE " + strings.Join(where, " AND ")
 	}
 
+	// Build HAVING clause for ref count filters
+	var having []string
+	var havingArgs []any
+	refCountSubquery := `(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id)`
+	if filter.RefCountMin != nil {
+		having = append(having, refCountSubquery+" >= ?")
+		havingArgs = append(havingArgs, *filter.RefCountMin)
+	}
+	if filter.RefCountMax != nil {
+		having = append(having, refCountSubquery+" <= ?")
+		havingArgs = append(havingArgs, *filter.RefCountMax)
+	}
+
+	groupByClause := ""
+	havingClause := ""
+	if len(having) > 0 {
+		groupByClause = " GROUP BY s.id"
+		havingClause = " HAVING " + strings.Join(having, " AND ")
+	}
+
 	// Count query
-	countSQL := `SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON s.file_id = f.id ` + whereClause
 	var totalCount int
-	if err := q.store.DB().QueryRow(countSQL, args...).Scan(&totalCount); err != nil {
-		return nil, fmt.Errorf("symbols: count: %w", err)
+	if len(having) > 0 {
+		// When HAVING is needed, count the rows from a subquery
+		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM (SELECT s.id FROM symbols s LEFT JOIN files f ON s.file_id = f.id %s%s%s)`,
+			whereClause, groupByClause, havingClause)
+		countArgs := append(append([]any{}, args...), havingArgs...)
+		if err := q.store.DB().QueryRow(countSQL, countArgs...).Scan(&totalCount); err != nil {
+			return nil, fmt.Errorf("symbols: count: %w", err)
+		}
+	} else {
+		countSQL := `SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON s.file_id = f.id ` + whereClause
+		if err := q.store.DB().QueryRow(countSQL, args...).Scan(&totalCount); err != nil {
+			return nil, fmt.Errorf("symbols: count: %w", err)
+		}
 	}
 
 	// Data query with ref count subquery
@@ -203,12 +235,13 @@ func (q *QueryBuilder) Symbols(filter SymbolFilter, sort Sort, page Pagination) 
 			(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 		 FROM symbols s
 		 LEFT JOIN files f ON s.file_id = f.id
-		 %s
+		 %s%s%s
 		 ORDER BY %s %s
 		 LIMIT ? OFFSET ?`,
-		prefixSymbolCols("s"), whereClause, orderCol, orderDir,
+		prefixSymbolCols("s"), whereClause, groupByClause, havingClause, orderCol, orderDir,
 	)
-	dataArgs := append(append([]any{}, args...), page.Limit, page.Offset)
+	dataArgs := append(append([]any{}, args...), havingArgs...)
+	dataArgs = append(dataArgs, page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {
@@ -363,11 +396,40 @@ func (q *QueryBuilder) SearchSymbols(pattern string, filter SymbolFilter, sort S
 		whereClause = "WHERE " + strings.Join(where, " AND ")
 	}
 
+	// Build HAVING clause for ref count filters
+	var having []string
+	var havingArgs []any
+	refCountSubquery := `(SELECT COUNT(*) FROM resolved_references rr WHERE rr.target_symbol_id = s.id)`
+	if filter.RefCountMin != nil {
+		having = append(having, refCountSubquery+" >= ?")
+		havingArgs = append(havingArgs, *filter.RefCountMin)
+	}
+	if filter.RefCountMax != nil {
+		having = append(having, refCountSubquery+" <= ?")
+		havingArgs = append(havingArgs, *filter.RefCountMax)
+	}
+
+	groupByClause := ""
+	havingClause := ""
+	if len(having) > 0 {
+		groupByClause = " GROUP BY s.id"
+		havingClause = " HAVING " + strings.Join(having, " AND ")
+	}
+
 	// Count
-	countSQL := `SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON s.file_id = f.id ` + whereClause
 	var totalCount int
-	if err := q.store.DB().QueryRow(countSQL, args...).Scan(&totalCount); err != nil {
-		return nil, fmt.Errorf("search symbols: count: %w", err)
+	if len(having) > 0 {
+		countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM (SELECT s.id FROM symbols s LEFT JOIN files f ON s.file_id = f.id %s%s%s)`,
+			whereClause, groupByClause, havingClause)
+		countArgs := append(append([]any{}, args...), havingArgs...)
+		if err := q.store.DB().QueryRow(countSQL, countArgs...).Scan(&totalCount); err != nil {
+			return nil, fmt.Errorf("search symbols: count: %w", err)
+		}
+	} else {
+		countSQL := `SELECT COUNT(*) FROM symbols s LEFT JOIN files f ON s.file_id = f.id ` + whereClause
+		if err := q.store.DB().QueryRow(countSQL, args...).Scan(&totalCount); err != nil {
+			return nil, fmt.Errorf("search symbols: count: %w", err)
+		}
 	}
 
 	// Data
@@ -380,12 +442,13 @@ func (q *QueryBuilder) SearchSymbols(pattern string, filter SymbolFilter, sort S
 			(SELECT COUNT(*) FROM resolved_references rr JOIN references_ r ON r.id = rr.reference_id WHERE rr.target_symbol_id = s.id AND r.file_id != s.file_id) AS external_ref_count
 		 FROM symbols s
 		 LEFT JOIN files f ON s.file_id = f.id
-		 %s
+		 %s%s%s
 		 ORDER BY %s %s
 		 LIMIT ? OFFSET ?`,
-		prefixSymbolCols("s"), whereClause, orderCol, orderDir,
+		prefixSymbolCols("s"), whereClause, groupByClause, havingClause, orderCol, orderDir,
 	)
-	dataArgs := append(append([]any{}, args...), page.Limit, page.Offset)
+	dataArgs := append(append([]any{}, args...), havingArgs...)
+	dataArgs = append(dataArgs, page.Limit, page.Offset)
 
 	rows, err := q.store.DB().Query(dataSQL, dataArgs...)
 	if err != nil {
