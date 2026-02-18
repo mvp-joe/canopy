@@ -36,10 +36,10 @@ func TestNew_CreatesStoreAndRuntime(t *testing.T) {
 
 	require.NotNil(t, e.store)
 	require.NotNil(t, e.runtime)
-	require.NotNil(t, e.Store())
+	require.NotNil(t, e.store)
 
 	// Verify the DB is usable (migration ran).
-	_, err = e.Store().InsertFile(&store.File{
+	_, err = e.store.InsertFile(&store.File{
 		Path: "/tmp/test.go", Language: "go", Hash: "abc", LastIndexed: time.Now(),
 	})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestIndexFiles_SkipsUnsupportedExtensions(t *testing.T) {
 	err := e.IndexFiles(context.Background(), []string{tmp})
 	require.NoError(t, err)
 
-	f, err := e.Store().FileByPath(tmp)
+	f, err := e.store.FileByPath(tmp)
 	require.NoError(t, err)
 	assert.Nil(t, f)
 }
@@ -100,7 +100,7 @@ func TestIndexFiles_SkipsFilteredLanguages(t *testing.T) {
 	err = e.IndexFiles(context.Background(), []string{tmp})
 	require.NoError(t, err)
 
-	f, err := e.Store().FileByPath(tmp)
+	f, err := e.store.FileByPath(tmp)
 	require.NoError(t, err)
 	assert.Nil(t, f)
 }
@@ -114,7 +114,7 @@ func TestIndexFiles_SkipsUnchangedFiles(t *testing.T) {
 
 	// Pre-insert with the correct hash.
 	hash := testFileHash(content)
-	_, err := e.Store().InsertFile(&store.File{
+	_, err := e.store.InsertFile(&store.File{
 		Path: tmp, Language: "go", Hash: hash, LastIndexed: time.Now(),
 	})
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestIndexFiles_ReindexesChangedFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(tmp, []byte("package main"), 0644))
 
 	// Insert with a stale hash.
-	_, err := e.Store().InsertFile(&store.File{
+	_, err := e.store.InsertFile(&store.File{
 		Path: tmp, Language: "go", Hash: "oldhash", LastIndexed: time.Now(),
 	})
 	require.NoError(t, err)
@@ -215,7 +215,7 @@ func TestDistinctLanguages(t *testing.T) {
 		{Path: "/b.go", Language: "go", Hash: "b", LastIndexed: time.Now()},
 		{Path: "/c.py", Language: "python", Hash: "c", LastIndexed: time.Now()},
 	} {
-		_, err := e.Store().InsertFile(f)
+		_, err := e.store.InsertFile(f)
 		require.NoError(t, err)
 	}
 
@@ -251,11 +251,11 @@ func Hello() string {
 	require.NoError(t, err)
 
 	// Verify extraction produced symbols.
-	f, err := e.Store().FileByPath(goFile)
+	f, err := e.store.FileByPath(goFile)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	syms, err := e.Store().SymbolsByFile(f.ID)
+	syms, err := e.store.SymbolsByFile(f.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, syms, "expected symbols from extraction")
 
@@ -287,11 +287,11 @@ func Add(a, b int) int { return a + b }
 	err = e.IndexFiles(context.Background(), []string{goFile})
 	require.NoError(t, err)
 
-	f, err := e.Store().FileByPath(goFile)
+	f, err := e.store.FileByPath(goFile)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	syms, err := e.Store().SymbolsByFile(f.ID)
+	syms, err := e.store.SymbolsByFile(f.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, syms)
 }
@@ -312,7 +312,7 @@ var x = 1
 	err = e.IndexFiles(context.Background(), []string{goFile})
 	require.NoError(t, err)
 
-	f, err := e.Store().FileByPath(goFile)
+	f, err := e.store.FileByPath(goFile)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 }

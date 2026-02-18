@@ -222,7 +222,7 @@ func runGoldenTest(t *testing.T, lang, srcDir, goldenPath string) {
 
 func verifyDefinitions(t *testing.T, engine *Engine, srcDir string, expected []goldenDef) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	// Build set of actual definitions: (name, kind, file_basename, line)
 	type defKey struct {
@@ -254,7 +254,7 @@ func verifyDefinitions(t *testing.T, engine *Engine, srcDir string, expected []g
 
 func verifyReferences(t *testing.T, engine *Engine, srcDir string, expected []goldenRef) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		// Find reference at the "from" position.
@@ -286,7 +286,7 @@ func verifyReferences(t *testing.T, engine *Engine, srcDir string, expected []go
 
 func verifyImplementations(t *testing.T, engine *Engine, expected []goldenImpl) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		rows, err := s.DB().Query(
@@ -304,7 +304,7 @@ func verifyImplementations(t *testing.T, engine *Engine, expected []goldenImpl) 
 
 func verifyCalls(t *testing.T, engine *Engine, expected []goldenCall) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		rows, err := s.DB().Query(
@@ -322,7 +322,7 @@ func verifyCalls(t *testing.T, engine *Engine, expected []goldenCall) {
 
 func verifyImports(t *testing.T, engine *Engine, srcDir string, expected []goldenImport) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		filePath := filepath.Join(srcDir, exp.File)
@@ -361,7 +361,7 @@ func verifyImports(t *testing.T, engine *Engine, srcDir string, expected []golde
 
 func verifyTypeMembers(t *testing.T, engine *Engine, expected []goldenTypeMember) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		syms := findParentSymbols(t, s, exp.Parent, "", "")
@@ -394,7 +394,7 @@ func verifyTypeMembers(t *testing.T, engine *Engine, expected []goldenTypeMember
 
 func verifyFunctionParams(t *testing.T, engine *Engine, expected []goldenFunctionParam) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		syms := findParentSymbols(t, s, exp.Parent, "", exp.ParentFile)
@@ -431,7 +431,7 @@ func verifyFunctionParams(t *testing.T, engine *Engine, expected []goldenFunctio
 
 func verifyTypeParams(t *testing.T, engine *Engine, expected []goldenTypeParam) {
 	t.Helper()
-	s := engine.Store()
+	s := engine.store
 
 	for _, exp := range expected {
 		syms := findParentSymbols(t, s, exp.Parent, "", "")

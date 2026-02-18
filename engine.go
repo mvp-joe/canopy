@@ -109,11 +109,6 @@ func (e *Engine) Close() error {
 	return e.store.Close()
 }
 
-// Store returns the underlying Store for direct access.
-func (e *Engine) Store() *Store {
-	return e.store
-}
-
 // scriptsHash computes a SHA-256 hash of all Risor scripts (extract, resolve, lib).
 // Walks the scriptsFS or scriptsDir to find all .risor files, sorts them by path,
 // and hashes their concatenated contents. Returns hex-encoded hash string.
@@ -469,6 +464,10 @@ var skipDirs = map[string]bool{
 // If root is inside a git repository, uses git ls-files to respect .gitignore.
 // Falls back to filesystem walk (skipping hidden dirs, node_modules, vendor,
 // __pycache__) if git is unavailable.
+//
+// IndexDirectory is idempotent: after it returns, the database exactly reflects
+// the files currently on disk under root. Files previously indexed under root
+// that no longer exist are removed along with their extraction/resolution data.
 func (e *Engine) IndexDirectory(ctx context.Context, root string) error {
 	paths, err := e.gitListFiles(root)
 	if err != nil {
@@ -478,7 +477,59 @@ func (e *Engine) IndexDirectory(ctx context.Context, root string) error {
 			return err
 		}
 	}
+	if err := e.removeStaleFiles(root, paths); err != nil {
+		return fmt.Errorf("remove stale files: %w", err)
+	}
 	return e.IndexFiles(ctx, paths)
+}
+
+// removeStaleFiles removes database records for files that were previously
+// indexed under root but are no longer present in discoveredPaths. This
+// handles file deletions and branch switches. Blast radius is accumulated
+// so that Resolve() re-resolves files that referenced removed symbols.
+func (e *Engine) removeStaleFiles(root string, discoveredPaths []string) error {
+	discovered := make(map[string]bool, len(discoveredPaths))
+	for _, p := range discoveredPaths {
+		discovered[p] = true
+	}
+
+	indexed, err := e.store.AllFiles()
+	if err != nil {
+		return fmt.Errorf("list indexed files: %w", err)
+	}
+
+	// Initialize blast radius so Resolve() sees our deletions.
+	if e.blastRadius == nil {
+		e.blastRadius = make(map[int64]bool)
+	}
+
+	// Normalize root with trailing separator for safe prefix matching.
+	prefix := filepath.Clean(root) + string(filepath.Separator)
+
+	for fileID, filePath := range indexed {
+		// Only consider files under this root.
+		if !strings.HasPrefix(filePath, prefix) {
+			continue
+		}
+		if discovered[filePath] {
+			continue // still exists on disk
+		}
+
+		// File was indexed but no longer on disk — remove it.
+		oldSymbols, _ := e.captureSymbols(fileID)
+		blastFileIDs := e.computeBlastRadius(fileID, oldSymbols, nil)
+		for _, fid := range blastFileIDs {
+			e.blastRadius[fid] = true
+		}
+
+		if err := e.store.DeleteFileData(fileID); err != nil {
+			return fmt.Errorf("delete stale file data %s: %w", filePath, err)
+		}
+		if _, err := e.store.DB().Exec("DELETE FROM files WHERE id = ?", fileID); err != nil {
+			return fmt.Errorf("delete stale file record %s: %w", filePath, err)
+		}
+	}
+	return nil
 }
 
 // gitListFiles uses git ls-files to discover tracked and untracked (but not

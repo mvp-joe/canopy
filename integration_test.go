@@ -110,7 +110,7 @@ func main() {
 	require.NoError(t, e.Resolve(ctx))
 
 	// Find the "greet" function symbol.
-	syms, err := e.Store().SymbolsByName("greet")
+	syms, err := e.store.SymbolsByName("greet")
 	require.NoError(t, err)
 	var greetID int64
 	for _, s := range syms {
@@ -160,7 +160,7 @@ func (m *MyType) String() string {
 	require.NoError(t, e.Resolve(ctx))
 
 	// Find the interface symbol.
-	syms, err := e.Store().SymbolsByName("Stringer")
+	syms, err := e.store.SymbolsByName("Stringer")
 	require.NoError(t, err)
 	var ifaceID int64
 	for _, s := range syms {
@@ -197,7 +197,7 @@ func c() {}
 
 	// Find symbol IDs.
 	findFunc := func(name string) int64 {
-		syms, err := e.Store().SymbolsByName(name)
+		syms, err := e.store.SymbolsByName(name)
 		require.NoError(t, err)
 		for _, s := range syms {
 			if s.Kind == "function" {
@@ -251,7 +251,7 @@ func main() {
 	require.NoError(t, e.IndexFiles(ctx, []string{path}))
 
 	// Look up the file to get its ID.
-	f, err := e.Store().FileByPath(path)
+	f, err := e.store.FileByPath(path)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
@@ -304,16 +304,16 @@ func Do() string {
 	require.NoError(t, e.Resolve(ctx))
 
 	// Verify both files were indexed.
-	mainFile, err := e.Store().FileByPath(filepath.Join(root, "main.go"))
+	mainFile, err := e.store.FileByPath(filepath.Join(root, "main.go"))
 	require.NoError(t, err)
 	require.NotNil(t, mainFile)
 
-	pkgFile, err := e.Store().FileByPath(filepath.Join(sub, "pkg.go"))
+	pkgFile, err := e.store.FileByPath(filepath.Join(sub, "pkg.go"))
 	require.NoError(t, err)
 	require.NotNil(t, pkgFile)
 
 	// Verify the Do function symbol was extracted.
-	syms, err := e.Store().SymbolsByName("Do")
+	syms, err := e.store.SymbolsByName("Do")
 	require.NoError(t, err)
 	require.NotEmpty(t, syms)
 }
@@ -334,7 +334,7 @@ func alpha() {}
 `), 0644))
 	require.NoError(t, e.IndexFiles(ctx, []string{path}))
 
-	syms, err := e.Store().SymbolsByName("alpha")
+	syms, err := e.store.SymbolsByName("alpha")
 	require.NoError(t, err)
 	require.NotEmpty(t, syms, "alpha should exist after first index")
 
@@ -346,11 +346,11 @@ func beta() {}
 	require.NoError(t, e.IndexFiles(ctx, []string{path}))
 
 	// alpha should be gone, beta should exist.
-	syms, err = e.Store().SymbolsByName("alpha")
+	syms, err = e.store.SymbolsByName("alpha")
 	require.NoError(t, err)
 	assert.Empty(t, syms, "alpha should be gone after reindex")
 
-	syms, err = e.Store().SymbolsByName("beta")
+	syms, err = e.store.SymbolsByName("beta")
 	require.NoError(t, err)
 	assert.NotEmpty(t, syms, "beta should exist after reindex")
 }
@@ -370,7 +370,7 @@ func hello() {}
 	require.NoError(t, e.IndexFiles(ctx, []string{path}))
 
 	// Get the file record.
-	f1, err := e.Store().FileByPath(path)
+	f1, err := e.store.FileByPath(path)
 	require.NoError(t, err)
 	require.NotNil(t, f1)
 	id1 := f1.ID
@@ -378,7 +378,7 @@ func hello() {}
 	// Second index without changes — should skip.
 	require.NoError(t, e.IndexFiles(ctx, []string{path}))
 
-	f2, err := e.Store().FileByPath(path)
+	f2, err := e.store.FileByPath(path)
 	require.NoError(t, err)
 	require.NotNil(t, f2)
 
@@ -904,4 +904,60 @@ func FormatAddr(host string, port int) string {
 			assert.GreaterOrEqual(t, sorted.Items[i-1].RefCount, sorted.Items[i].RefCount)
 		}
 	})
+}
+
+// TestIntegration_IndexDirectory_RemovesStaleFiles verifies that IndexDirectory
+// cleans up database records for files that have been deleted from disk.
+func TestIntegration_IndexDirectory_RemovesStaleFiles(t *testing.T) {
+	e := newIntegrationEngine(t, WithLanguages("go"))
+	ctx := context.Background()
+	root := t.TempDir()
+
+	// Create two Go files and index them.
+	mainPath := writeGoFile(t, root, "main.go", `package main
+
+func main() { helper() }
+`)
+	helperPath := writeGoFile(t, root, "helper.go", `package main
+
+func helper() string { return "hi" }
+`)
+
+	require.NoError(t, e.IndexDirectory(ctx, root))
+	require.NoError(t, e.Resolve(ctx))
+
+	// Both files should be indexed.
+	f1, err := e.store.FileByPath(mainPath)
+	require.NoError(t, err)
+	require.NotNil(t, f1, "main.go should be indexed")
+
+	f2, err := e.store.FileByPath(helperPath)
+	require.NoError(t, err)
+	require.NotNil(t, f2, "helper.go should be indexed")
+
+	// helper() symbol should exist.
+	syms, err := e.store.SymbolsByName("helper")
+	require.NoError(t, err)
+	require.NotEmpty(t, syms, "helper symbol should exist")
+
+	// Delete helper.go from disk.
+	require.NoError(t, os.Remove(helperPath))
+
+	// Re-index the directory.
+	require.NoError(t, e.IndexDirectory(ctx, root))
+
+	// helper.go should no longer be in the database.
+	f2, err = e.store.FileByPath(helperPath)
+	require.NoError(t, err)
+	assert.Nil(t, f2, "helper.go should be removed from DB after deletion")
+
+	// helper() symbol should be gone.
+	syms, err = e.store.SymbolsByName("helper")
+	require.NoError(t, err)
+	assert.Empty(t, syms, "helper symbol should be cleaned up")
+
+	// main.go should still be indexed.
+	f1, err = e.store.FileByPath(mainPath)
+	require.NoError(t, err)
+	require.NotNil(t, f1, "main.go should still be indexed")
 }

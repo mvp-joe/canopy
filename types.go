@@ -6,7 +6,6 @@ import "github.com/jward/canopy/internal/store"
 // These are Go type aliases (=) — identical to the internal types at compile
 // time. External consumers use these names; no conversion is needed.
 
-type Store = store.Store
 type Symbol = store.Symbol
 type File = store.File
 type Scope = store.Scope
